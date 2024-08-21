@@ -1,0 +1,21 @@
+{
+  "name": "jigsaw",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot ./index.ts",
+    "node-dev": "tsx watch ./index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.5.0",
+    "tsx": "^4.17.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "node-ts": "^6.1.2",
+    "tsc": "^2.0.4"
+  }
+}
