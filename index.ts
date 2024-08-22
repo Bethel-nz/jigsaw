@@ -146,32 +146,90 @@ class Knob {
     return `<h${level}${idAttr}>${text}</h${level}>`;
   }
 
+  private renderBlock(blockType: string, data: TemplateData): string {
+    const startTag = `{% ${blockType} %}`;
+    const endTag = `{% end${blockType} %}`;
+    const startIndex = this.template.indexOf(startTag);
+    const endIndex = this.template.indexOf(endTag);
+
+    if (startIndex === -1 || endIndex === -1) {
+      return '';
+    }
+
+    const blockContent = this.template.slice(
+      startIndex + startTag.length,
+      endIndex
+    );
+
+    const blockKnob = new Knob(blockContent);
+
+    return blockKnob.render(data);
+  }
+
   private createControlStructure(
     structure: string
   ): (data: TemplateData) => string {
-    const [keyword, ...rest] = structure.split(' ');
+    const [keyword, ...rest] = structure.trim().split(/\s+/);
     const condition = rest.join(' ');
 
     if (keyword === 'if') {
       return (data: TemplateData) => {
         const result = this.evaluateCondition(condition, data);
-        return result ? '' : ''; // Placeholder for if implementation
+        return result
+          ? this.renderBlock('if', data)
+          : this.renderBlock('else', data);
       };
     } else if (keyword === 'for') {
       const [item, , collection] = condition.split(' ');
       return (data: TemplateData) => {
         const items = this.getValueFromData(collection, data);
-        if (!Array.isArray(items)) return '';
-        return items
-          .map((itemData) => {
-            const newData = { ...data, [item]: itemData };
-            return ''; // Placeholder for for loop implementation
-          })
-          .join('');
+        if (!items || typeof items !== 'object') return '';
+
+        const blockContent = this.extractBlockContent('for');
+        let result = '';
+
+        if (Array.isArray(items)) {
+          items.forEach((itemData, index) => {
+            const newData = {
+              ...data,
+              [item]: itemData,
+              [`${item}_index`]: index,
+              [`${item}_first`]: index === 0,
+              [`${item}_last`]: index === items.length - 1,
+            };
+            result += this.renderContent(blockContent, newData);
+          });
+        } else {
+          Object.entries(items).forEach(([key, value], index) => {
+            const newData = {
+              ...data,
+              [item]: { key, value },
+              [`${item}_index`]: index,
+              [`${item}_first`]: index === 0,
+              [`${item}_last`]: index === Object.keys(items).length - 1,
+            };
+            result += this.renderContent(blockContent, newData);
+          });
+        }
+
+        return result;
       };
     }
 
     return () => '';
+  }
+
+  private extractBlockContent(blockType: string): string {
+    const regex = new RegExp(
+      `{%\\s*${blockType}\\s+.*?%}([\\s\\S]*?){%\\s*end${blockType}\\s*%}`
+    );
+    const match = regex.exec(this.template);
+    return match ? match[1] : '';
+  }
+
+  private renderContent(content: string, data: TemplateData): string {
+    const tempKnob = new Knob(content);
+    return tempKnob.render(data);
   }
 
   private evaluateCondition(condition: string, data: TemplateData): boolean {
@@ -386,6 +444,18 @@ JigSaw.registerTemplate(
   {% endif %}
   {{ socialLinks }}
   {{ githubLink }}
+    <div class="projects">
+    <h2>Projects</h2>
+    {% for project in projects %}
+      <div class="project">
+        <h3><a href="{{ project.url }}">{{ project.name }}</a></h3>
+        <p>{{ project.description }}</p>
+        <ul class="technologies">
+            <li>{{ project.technologies }}</li>
+        </ul>
+      </div>
+    {% endfor %}
+  </div>
 </div>
 `
 );
@@ -404,7 +474,6 @@ JigSaw.registerRoute('/profile', (params) => {
         src: 'https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?q=80&w=1856&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
         alt: 'user image',
         class: 'profile-image',
-        style: 'width:200px',
       },
     },
     headerName: {
@@ -435,6 +504,28 @@ JigSaw.registerRoute('/profile', (params) => {
       text: 'Check out my GitHub',
       title: "John Doe's GitHub Profile",
     },
+    projects: [
+      {
+        name: 'TypeScript Task Manager',
+        description:
+          'A command-line task management tool built with TypeScript',
+        url: 'https://github.com/janesmith/ts-task-manager',
+        technologies: 'Node.js',
+      },
+      {
+        name: 'React Weather App',
+        description: 'A weather application using React and OpenWeatherMap API',
+        url: 'https://weather.janesmith.dev',
+        technologies: 'React',
+      },
+      {
+        name: 'Express Blog API',
+        description:
+          'RESTful API for a blog application built with Express and MongoDB',
+        url: 'https://github.com/janesmith/express-blog-api',
+        technologies: 'Express.js',
+      },
+    ],
   };
   return JigSaw.render('profile', data);
 });
