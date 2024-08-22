@@ -460,7 +460,6 @@ JigSaw.registerTemplate(
 `
 );
 
-JigSaw.registerTemplate('./templates/home.html'); // Assuming this file exists
 
 JigSaw.registerRoute('/profile', (params) => {
   const data = {
@@ -539,6 +538,7 @@ JigSaw.setHead(
   <link rel="stylesheet" href="/styles/profile.css">
 `
 );
+JigSaw.registerTemplate('./templates/home.html');
 
 JigSaw.registerRoute('/', (params) => {
   return JigSaw.render('home', { title: 'Welcome' });
