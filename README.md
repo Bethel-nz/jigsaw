@@ -31,15 +31,15 @@ cd jigsaw-templating-engine
 Then, install the required dependencies:
 
 ```bash
-npm install
+bun i
 ```
 
 ### Usage
 
-1. **Import JigSaw into Your Project:**
+1. **Start the server**
 
-   ```typescript
-   import { JigSaw } from './path/to/jigsaw';
+   ```bash
+   bun run dev
    ```
 
 2. **Register a Template:**
@@ -86,9 +86,9 @@ npm install
    });
    ```
 
-4. **Start the Server:**
+4. **Set your port:**
 
-   To start the server, simply call:
+   To set up your port and start the server, simply call:
 
    ```typescript
    JigSaw.startServer(3000); // Or any other port
