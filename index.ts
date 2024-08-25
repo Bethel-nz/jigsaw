@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as http from 'http';
+import { parse, HTMLElement } from 'node-html-parser';
 
 type TemplateData = Record<string, any>;
 interface JigSawConfig {
@@ -46,6 +47,7 @@ class Knob {
 
     while ((match = regex.exec(this.template)) !== null) {
       segments.push(this.template.slice(lastIndex, match.index));
+      console.log(match[1], match[2], match[3]);
 
       if (match[1]) {
         // Handle partials
@@ -57,7 +59,6 @@ class Knob {
         // Handle variable interpolation
         segments.push(this.createValueGetter(match[3].trim()));
       }
-
       lastIndex = regex.lastIndex;
     }
 
@@ -131,6 +132,32 @@ class Knob {
         .join('');
     }
 
+    const voidElements = [
+      'img',
+      'br',
+      'hr',
+      'input',
+      'meta',
+      'link',
+      'area',
+      'base',
+      'col',
+      'embed',
+      'param',
+      'source',
+      'track',
+      'wbr',
+    ];
+
+    if (voidElements.includes(tag)) {
+      return `<${tag}${attributes}/>`;
+    }
+
+    if (childContent.trim() === '') {
+      return '';
+    }
+
+    // If there's content, render normally
     return `<${tag}${attributes}>${childContent}</${tag}>`;
   }
 
@@ -183,40 +210,103 @@ class Knob {
       const [item, , collection] = condition.split(' ');
       return (data: TemplateData) => {
         const items = this.getValueFromData(collection, data);
-        if (!items || typeof items !== 'object') return '';
+        if (!items) return '';
 
         const blockContent = this.extractBlockContent('for');
         let result = '';
 
-        if (Array.isArray(items)) {
-          items.forEach((itemData, index) => {
+        const processItems = (
+          itemsToProcess: any,
+          parentData: TemplateData
+        ) => {
+          if (Array.isArray(itemsToProcess)) {
+            itemsToProcess.forEach((itemData, index) => {
+              const newData = {
+                ...parentData,
+                [item]: itemData,
+                [`${item}_index`]: index,
+                [`${item}_first`]: index === 0,
+                [`${item}_last`]: index === itemsToProcess.length - 1,
+              };
+              result += this.renderContent(blockContent, newData);
+            });
+          } else if (
+            typeof itemsToProcess === 'object' &&
+            itemsToProcess !== null
+          ) {
+            Object.entries(itemsToProcess).forEach(([key, value], index) => {
+              const newData = {
+                ...parentData,
+                [item]: { key, value },
+                [`${item}_index`]: index,
+                [`${item}_first`]: index === 0,
+                [`${item}_last`]:
+                  index === Object.keys(itemsToProcess).length - 1,
+              };
+              result += this.renderContent(blockContent, newData);
+            });
+          } else {
+            // If it's not an array or object, treat it as a single item
             const newData = {
-              ...data,
-              [item]: itemData,
-              [`${item}_index`]: index,
-              [`${item}_first`]: index === 0,
-              [`${item}_last`]: index === items.length - 1,
+              ...parentData,
+              [item]: itemsToProcess,
+              [`${item}_index`]: 0,
+              [`${item}_first`]: true,
+              [`${item}_last`]: true,
             };
             result += this.renderContent(blockContent, newData);
-          });
-        } else {
-          Object.entries(items).forEach(([key, value], index) => {
-            const newData = {
-              ...data,
-              [item]: { key, value },
-              [`${item}_index`]: index,
-              [`${item}_first`]: index === 0,
-              [`${item}_last`]: index === Object.keys(items).length - 1,
-            };
-            result += this.renderContent(blockContent, newData);
-          });
-        }
+          }
+        };
 
+        processItems(items, data);
         return result;
       };
     }
 
     return () => '';
+  }
+  private evaluateExpression(expression: string, data: TemplateData): any {
+    expression = expression.trim();
+
+    if (
+      /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$/.test(expression)
+    ) {
+      return this.getValueFromData(expression, data);
+    }
+
+    // Handle 'if' condition
+    if (expression.startsWith('if ')) {
+      const condition = expression.slice(3).trim();
+      return !!this.getValueFromData(condition, data);
+    }
+
+    // Handle 'for' loop
+    if (expression.startsWith('for ')) {
+      const [_, item, __, collection] = expression.split(/\s+/);
+      return {
+        isForLoop: true,
+        item,
+        collection: this.getValueFromData(collection, data),
+      };
+    }
+
+    // If it's not a special case, just return the expression itself
+    return expression;
+  }
+
+  private renderContent(content: string, data: TemplateData): string {
+    const regex = /\{\{([^}]+)\}\}/g;
+    return content.replace(regex, (match, expression) => {
+      if (
+        expression.trim().startsWith('if ') ||
+        expression.trim().startsWith('for ')
+      ) {
+        const controlStructure = this.createControlStructure(expression.trim());
+        return controlStructure(data);
+      } else {
+        return this.evaluateExpression(expression.trim(), data);
+      }
+    });
   }
 
   private extractBlockContent(blockType: string): string {
@@ -225,11 +315,6 @@ class Knob {
     );
     const match = regex.exec(this.template);
     return match ? match[1] : '';
-  }
-
-  private renderContent(content: string, data: TemplateData): string {
-    const tempKnob = new Knob(content);
-    return tempKnob.render(data);
   }
 
   private evaluateCondition(condition: string, data: TemplateData): boolean {
@@ -298,11 +383,6 @@ class JigSaw {
     return template.render(data);
   }
 
-  static renderString(templateString: string, data: TemplateData): string {
-    const template = new Knob(templateString);
-    return template.render(data);
-  }
-
   static setHead(route: string, headContent: string): void {
     if (!this.routes.has(route)) {
       throw new Error(`Route "${route}" is not registered`);
@@ -310,26 +390,100 @@ class JigSaw {
     this.headContent.set(route, headContent);
   }
 
+  private static processHtml(html: string): string {
+    const root = parse(html);
+
+    const isElementEmpty = (element: HTMLElement): boolean => {
+      return (
+        element.textContent.trim() === '' &&
+        !element.childNodes.some(
+          (child) =>
+            child.nodeType === 1 && !isElementEmpty(child as HTMLElement)
+        )
+      );
+    };
+
+    const isSelfClosingTag = (tagName: string): boolean => {
+      const selfClosingTags = [
+        'img',
+        'br',
+        'hr',
+        'input',
+        'meta',
+        'link',
+        'area',
+        'base',
+        'col',
+        'embed',
+        'param',
+        'source',
+        'track',
+        'wbr',
+      ];
+      return selfClosingTags.includes(tagName.toLowerCase());
+    };
+
+    const processNode = (node: HTMLElement): string => {
+      if (node.nodeType === 3) {
+        // Text node
+        return node.text;
+      }
+
+      if (node.nodeType === 1) {
+        // Element node
+        const tagName = node.tagName.toLowerCase();
+
+        if (tagName === '!doctype') {
+          return '<!DOCTYPE html>';
+        }
+
+        if (isSelfClosingTag(tagName)) {
+          return `<${tagName}${node.rawAttrs ? ' ' + node.rawAttrs : ''}>`;
+        }
+
+        if (isElementEmpty(node) && !['script', 'style'].includes(tagName)) {
+          return '';
+        }
+
+        const childContent = node.childNodes
+          .map((child) => processNode(child as HTMLElement))
+          .join('');
+
+        return `<${tagName}${
+          node.rawAttrs ? ' ' + node.rawAttrs : ''
+        }>${childContent}</${tagName}>`;
+      }
+
+      return '';
+    };
+
+    return root.childNodes
+      .map((child) => processNode(child as HTMLElement))
+      .join('');
+  }
+
   static registerRoute(
     path: string,
     handler: (params: Record<string, string>) => string
   ): void {
     this.routes.set(path, (params) => {
-      const content = handler(params);
+      const rawContent = handler(params);
       const head = this.headContent.get(path) || '';
       const navigation = this.config.generateNavigation
         ? this.generateNavigation()
         : '';
-      return `<!DOCTYPE html>
+      const fullHtml = `<!DOCTYPE html>
 <html>
   <head>
     ${head}
   </head>
   <body>
     ${navigation}
-    ${content}
+    ${rawContent}
   </body>
 </html>`;
+      const processedContent = this.processHtml(fullHtml);
+      return processedContent;
     });
   }
 
@@ -347,6 +501,7 @@ class JigSaw {
     }
 
     const navItems = Array.from(this.routes.keys())
+      .reverse()
       .map(
         (route) =>
           `<li><a href="${route}">${
@@ -410,13 +565,12 @@ class JigSaw {
       // Handle dynamic routes
       const route = this.routes.get(pathname);
       if (route) {
-        const params = {}; // You might want to parse query parameters here
+        const params = {};
         const content = route(params);
-        const headContent = this.headContent.get(pathname) || '';
+        console.log(content);
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(
-          `<html><head>${headContent}</head><body>${content}</body></html>`
-        );
+
+        res.end(`${content}`);
       } else {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('404 Not Found');
@@ -451,7 +605,9 @@ JigSaw.registerTemplate(
         <h3><a href="{{ project.url }}">{{ project.name }}</a></h3>
         <p>{{ project.description }}</p>
         <ul class="technologies">
-            <li>{{ project.technologies }}</li>
+            <li>
+            {{ project.technologies }}
+            </li>
         </ul>
       </div>
     {% endfor %}
@@ -459,7 +615,6 @@ JigSaw.registerTemplate(
 </div>
 `
 );
-
 
 JigSaw.registerRoute('/profile', (params) => {
   const data = {
@@ -509,14 +664,15 @@ JigSaw.registerRoute('/profile', (params) => {
         description:
           'A command-line task management tool built with TypeScript',
         url: 'https://github.com/janesmith/ts-task-manager',
-        technologies: 'Node.js',
+        technologies: ['Node.js', 'TypeScript', 'Commander.js'],
       },
       {
         name: 'React Weather App',
         description: 'A weather application using React and OpenWeatherMap API',
         url: 'https://weather.janesmith.dev',
-        technologies: 'React',
+        technologies: ['React', 'JavaScript', 'OpenWeatherMap API'],
       },
+
       {
         name: 'Express Blog API',
         description:
@@ -545,4 +701,4 @@ JigSaw.registerRoute('/', (params) => {
 });
 
 // Start the server
-JigSaw.startServer();
+JigSaw.startServer(8750);

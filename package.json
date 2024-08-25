@@ -15,6 +15,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "node-html-parser": "^6.1.13",
     "node-ts": "^6.1.2",
     "tsc": "^2.0.4"
   }
