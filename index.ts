@@ -2,10 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as http from 'http';
 import { parse, HTMLElement } from 'node-html-parser';
+import * as chokidar from 'chokidar';
+import { fetchUserData } from './data';
 
 type TemplateData = Record<string, any>;
 interface JigSawConfig {
-  generateNavigation?: boolean;
+  port?: number;
 }
 
 interface ComponentDefinition {
@@ -31,87 +33,215 @@ interface HeaderDefinition {
 
 class Knob {
   private readonly template: string;
-  private readonly compiledTemplate: (data: TemplateData) => string;
 
   constructor(template: string) {
     this.template = template;
-    this.compiledTemplate = this.compile();
   }
 
-  private compile(): (data: TemplateData) => string {
-    const regex = /{{{\s*(.*?)\s*}}}|\{%\s*(.*?)\s*%\}|{{\s*(.*?)\s*}}/g;
-    const segments: (string | ((data: TemplateData) => string))[] = [];
+  render(data: TemplateData): string {
+    return this.renderContent(this.processComponents(data), data);
+  }
 
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = regex.exec(this.template)) !== null) {
-      segments.push(this.template.slice(lastIndex, match.index));
-      console.log(match[1], match[2], match[3]);
-
-      if (match[1]) {
-        // Handle partials
-        segments.push(this.createPartialGetter(match[1].trim()));
-      } else if (match[2]) {
-        // Handle control structures (if, for)
-        segments.push(this.createControlStructure(match[2].trim()));
-      } else if (match[3]) {
-        // Handle variable interpolation
-        segments.push(this.createValueGetter(match[3].trim()));
+  private processComponents(data: TemplateData): string {
+    const componentRegex = /{{{(\w+)}}}/g;
+    return this.template.replace(componentRegex, (match, componentName) => {
+      const componentTemplate = JigSaw.getComponent(componentName);
+      if (!componentTemplate) {
+        console.warn(`Component not found: ${componentName}`);
+        return '';
       }
+      const componentData = data[componentName] || {};
+      return this.renderContent(componentTemplate, componentData);
+    });
+  }
+
+  private renderContent(content: string, data: TemplateData): string {
+    const regex = /(\{\{[^}]+\}\}|\{%[^%]+%\})/g;
+    let lastIndex = 0;
+    let result = '';
+
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      result += content.slice(lastIndex, match.index);
+      const expression = match[0];
+
+      if (expression.startsWith('{{')) {
+        const innerExpression = expression.slice(2, -2).trim();
+        result += this.evaluateExpression(innerExpression, data);
+      } else if (expression.startsWith('{%')) {
+        const controlStructure = expression.slice(2, -2).trim();
+        result += this.processControlStructure(controlStructure, data);
+      }
+
       lastIndex = regex.lastIndex;
     }
 
-    segments.push(this.template.slice(lastIndex));
-
-    return (data: TemplateData) =>
-      segments
-        .map((segment) =>
-          typeof segment === 'function' ? segment(data) : segment
-        )
-        .join('');
+    result += content.slice(lastIndex);
+    return result;
   }
 
-  private createValueGetter(path: string): (data: TemplateData) => string {
+  private processControlStructure(
+    structure: string,
+    data: TemplateData
+  ): string {
+    const [keyword, ...rest] = structure.split(/\s+/);
+    const condition = rest.join(' ');
+
+    if (keyword === 'if') {
+      return this.processIfStatement(condition, data);
+    } else if (keyword === 'for') {
+      return this.processForLoop(condition, data);
+    }
+
+    return '';
+  }
+
+  private processIfStatement(condition: string, data: TemplateData): string {
+    const result = this.evaluateCondition(condition, data);
+
+    const ifStartTag = `{% if ${condition} %}`;
+    const ifEndTag = '{% endif %}';
+    const elseTag = '{% else %}';
+    const elseEndTag = '{% endelse %}';
+
+    const ifBlock = this.extractBlock('if', condition);
+    const elseBlock = this.extractBlock('else');
+    if (result) {
+      if (
+        ifBlock &&
+        ifBlock.includes(ifStartTag) &&
+        ifBlock.includes(ifEndTag)
+      ) {
+        const content = ifBlock.slice(
+          ifStartTag.length,
+          ifBlock.lastIndexOf(ifEndTag)
+        );
+        return this.renderContent(content, data);
+      }
+    } else if (
+      elseBlock &&
+      elseBlock.startsWith(elseTag) &&
+      elseBlock.endsWith(elseEndTag)
+    ) {
+      const content = elseBlock.slice(
+        elseTag.length,
+        elseBlock.lastIndexOf(elseEndTag)
+      );
+      return this.renderContent(content, data);
+    }
+
+    return '';
+  }
+
+  private processForLoop(condition: string, data: TemplateData): string {
+    const [item, , collection] = condition.split(' ');
+    const items = this.getValueFromData(collection, data);
+    const loopBlock = this.extractBlock('for', condition);
+
+    if (!Array.isArray(items)) return '';
+
+    let result = '';
+    items.forEach((itemData, index) => {
+      const itemContext = {
+        ...data,
+        [item]: itemData,
+        [`${item}_index`]: index,
+        [`${item}_first`]: index === 0,
+        [`${item}_last`]: index === items.length - 1,
+      };
+      result += this.renderContent(loopBlock, itemContext);
+    });
+
+    return result;
+  }
+
+  private extractBlock(
+    blockType: string,
+    condition?: string,
+    data?: TemplateData
+  ): string {
+    let startTag = condition
+      ? `{% ${blockType} ${condition} %}`
+      : `{% ${blockType} %}`;
+    const endTag = `{% end${blockType} %}`;
+    let depth = 0;
+    let startIndex = this.template.indexOf(startTag);
+    let endIndex = startIndex;
+
+    if (blockType === 'if' && condition && data) {
+      const conditionResult = this.evaluateCondition(condition, data);
+
+      if (!conditionResult) {
+        const elseTag = '{% else %}';
+        const elseIndex = this.template.indexOf(elseTag, startIndex);
+        if (
+          elseIndex !== -1 &&
+          elseIndex < this.template.indexOf(endTag, startIndex)
+        ) {
+          startIndex = elseIndex;
+          startTag = elseTag;
+        } else {
+          return '';
+        }
+      }
+    }
+
+    while (endIndex < this.template.length) {
+      const nextStart = this.template.indexOf(`{% ${blockType}`, endIndex + 1);
+      const nextEnd = this.template.indexOf(endTag, endIndex + 1);
+      if (nextStart !== -1 && nextStart < nextEnd) {
+        depth++;
+        endIndex = nextStart;
+      } else if (nextEnd !== -1) {
+        if (depth === 0) {
+          endIndex = nextEnd;
+          break;
+        }
+        depth--;
+        endIndex = nextEnd;
+      } else {
+        break;
+      }
+    }
+
+    if (startIndex === -1 || endIndex === -1) {
+      return '';
+    }
+
+    const extractedBlock = this.template.slice(
+      startIndex + startTag.length,
+      endIndex
+    );
+    return extractedBlock;
+  }
+
+  private evaluateExpression(expression: string, data: TemplateData): string {
+    const value = this.getValueFromData(expression, data);
+    if (typeof value === 'object' && value !== null) {
+      if ('tag' in value) {
+        return this.renderComponent(value as ComponentDefinition);
+      } else if (value.type === 'link') {
+        return this.renderLink(value as LinkDefinition);
+      } else if (value.type === 'header') {
+        return this.renderHeader(value as HeaderDefinition);
+      }
+      return JSON.stringify(value);
+    }
+    return value !== undefined && value !== null ? String(value) : '';
+  }
+
+  private evaluateCondition(condition: string, data: TemplateData): boolean {
+    return !!this.getValueFromData(condition, data);
+  }
+
+  private getValueFromData(path: string, data: TemplateData): any {
     const keys = path.split('.');
-    return (data: TemplateData) => {
-      let value: any = data;
-      for (const key of keys) {
-        if (value === undefined || value === null) return '';
-        value = value[key];
-      }
-      if (typeof value === 'object' && value !== null) {
-        if ('tag' in value) {
-          return this.renderComponent(value as ComponentDefinition);
-        } else if (value.type === 'link') {
-          return this.renderLink(value as LinkDefinition);
-        } else if (value.type === 'header') {
-          return this.renderHeader(value as HeaderDefinition);
-        }
-        return JSON.stringify(value);
-      }
-      return value !== undefined && value !== null ? String(value) : '';
-    };
-  }
-
-  private createPartialGetter(
-    partialName: string
-  ): (data: TemplateData) => string {
-    return (data: TemplateData) => {
-      const partialData = data[partialName];
-      if (typeof partialData === 'object' && partialData !== null) {
-        if (partialData.type === 'link') {
-          return this.renderLink(partialData as LinkDefinition);
-        } else if (partialData.type === 'header') {
-          return this.renderHeader(partialData as HeaderDefinition);
-        } else if ('tag' in partialData) {
-          return this.renderComponent(partialData as ComponentDefinition);
-        }
-        return JSON.stringify(partialData);
-      }
-      const partial = JigSaw.getPartial(partialName);
-      return partial ? partial.render(data) : String(partialData);
-    };
+    let value: any = data;
+    for (const key of keys) {
+      if (value === undefined || value === null) return undefined;
+      value = value[key];
+    }
+    return value;
   }
 
   private renderComponent(component: ComponentDefinition): string {
@@ -157,7 +287,6 @@ class Knob {
       return '';
     }
 
-    // If there's content, render normally
     return `<${tag}${attributes}>${childContent}</${tag}>`;
   }
 
@@ -172,168 +301,6 @@ class Knob {
     const idAttr = id ? ` id="${id}"` : '';
     return `<h${level}${idAttr}>${text}</h${level}>`;
   }
-
-  private renderBlock(blockType: string, data: TemplateData): string {
-    const startTag = `{% ${blockType} %}`;
-    const endTag = `{% end${blockType} %}`;
-    const startIndex = this.template.indexOf(startTag);
-    const endIndex = this.template.indexOf(endTag);
-
-    if (startIndex === -1 || endIndex === -1) {
-      return '';
-    }
-
-    const blockContent = this.template.slice(
-      startIndex + startTag.length,
-      endIndex
-    );
-
-    const blockKnob = new Knob(blockContent);
-
-    return blockKnob.render(data);
-  }
-
-  private createControlStructure(
-    structure: string
-  ): (data: TemplateData) => string {
-    const [keyword, ...rest] = structure.trim().split(/\s+/);
-    const condition = rest.join(' ');
-
-    if (keyword === 'if') {
-      return (data: TemplateData) => {
-        const result = this.evaluateCondition(condition, data);
-        return result
-          ? this.renderBlock('if', data)
-          : this.renderBlock('else', data);
-      };
-    } else if (keyword === 'for') {
-      const [item, , collection] = condition.split(' ');
-      return (data: TemplateData) => {
-        const items = this.getValueFromData(collection, data);
-        if (!items) return '';
-
-        const blockContent = this.extractBlockContent('for');
-        let result = '';
-
-        const processItems = (
-          itemsToProcess: any,
-          parentData: TemplateData
-        ) => {
-          if (Array.isArray(itemsToProcess)) {
-            itemsToProcess.forEach((itemData, index) => {
-              const newData = {
-                ...parentData,
-                [item]: itemData,
-                [`${item}_index`]: index,
-                [`${item}_first`]: index === 0,
-                [`${item}_last`]: index === itemsToProcess.length - 1,
-              };
-              result += this.renderContent(blockContent, newData);
-            });
-          } else if (
-            typeof itemsToProcess === 'object' &&
-            itemsToProcess !== null
-          ) {
-            Object.entries(itemsToProcess).forEach(([key, value], index) => {
-              const newData = {
-                ...parentData,
-                [item]: { key, value },
-                [`${item}_index`]: index,
-                [`${item}_first`]: index === 0,
-                [`${item}_last`]:
-                  index === Object.keys(itemsToProcess).length - 1,
-              };
-              result += this.renderContent(blockContent, newData);
-            });
-          } else {
-            // If it's not an array or object, treat it as a single item
-            const newData = {
-              ...parentData,
-              [item]: itemsToProcess,
-              [`${item}_index`]: 0,
-              [`${item}_first`]: true,
-              [`${item}_last`]: true,
-            };
-            result += this.renderContent(blockContent, newData);
-          }
-        };
-
-        processItems(items, data);
-        return result;
-      };
-    }
-
-    return () => '';
-  }
-  private evaluateExpression(expression: string, data: TemplateData): any {
-    expression = expression.trim();
-
-    if (
-      /^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$/.test(expression)
-    ) {
-      return this.getValueFromData(expression, data);
-    }
-
-    // Handle 'if' condition
-    if (expression.startsWith('if ')) {
-      const condition = expression.slice(3).trim();
-      return !!this.getValueFromData(condition, data);
-    }
-
-    // Handle 'for' loop
-    if (expression.startsWith('for ')) {
-      const [_, item, __, collection] = expression.split(/\s+/);
-      return {
-        isForLoop: true,
-        item,
-        collection: this.getValueFromData(collection, data),
-      };
-    }
-
-    // If it's not a special case, just return the expression itself
-    return expression;
-  }
-
-  private renderContent(content: string, data: TemplateData): string {
-    const regex = /\{\{([^}]+)\}\}/g;
-    return content.replace(regex, (match, expression) => {
-      if (
-        expression.trim().startsWith('if ') ||
-        expression.trim().startsWith('for ')
-      ) {
-        const controlStructure = this.createControlStructure(expression.trim());
-        return controlStructure(data);
-      } else {
-        return this.evaluateExpression(expression.trim(), data);
-      }
-    });
-  }
-
-  private extractBlockContent(blockType: string): string {
-    const regex = new RegExp(
-      `{%\\s*${blockType}\\s+.*?%}([\\s\\S]*?){%\\s*end${blockType}\\s*%}`
-    );
-    const match = regex.exec(this.template);
-    return match ? match[1] : '';
-  }
-
-  private evaluateCondition(condition: string, data: TemplateData): boolean {
-    return !!this.getValueFromData(condition, data);
-  }
-
-  private getValueFromData(path: string, data: TemplateData): any {
-    const keys = path.split('.');
-    let value: any = data;
-    for (const key of keys) {
-      if (value === undefined || value === null) return undefined;
-      value = value[key];
-    }
-    return value;
-  }
-
-  render(data: TemplateData): string {
-    return this.compiledTemplate(data);
-  }
 }
 
 class JigSaw {
@@ -341,38 +308,43 @@ class JigSaw {
   private static partials: Map<string, Knob> = new Map();
   private static routes: Map<
     string,
-    (params: Record<string, string>) => string
+    (params?: Record<string, string>) => string | Promise<string>
   > = new Map();
-  private static headContent: Map<string, string> = new Map();
 
   private static config: JigSawConfig = {
-    generateNavigation: true, // Default value
+    port: 3000,
   };
+
+  private static templatesDir: string = path.join(process.cwd(), 'templates');
+  private static buildDir: string = path.join(process.cwd(), '.build');
+  private static componentsDir: string = path.join(process.cwd(), 'components');
+
+  private static components: Map<string, string> = new Map();
+  private static watcher: chokidar.FSWatcher | null = null;
 
   static configure(newConfig: JigSawConfig): void {
     this.config = { ...this.config, ...newConfig };
   }
 
-  static registerTemplate(nameOrPath: string, content?: string): void {
-    let template: Knob;
-    if (content) {
-      template = new Knob(content);
+  static registerTemplate(nameOrNames: string | string[]): void {
+    if (Array.isArray(nameOrNames)) {
+      nameOrNames.forEach((name) => this.loadSingleTemplate(name));
     } else {
-      const fullPath = path.resolve(nameOrPath);
-      const name = path.basename(fullPath, path.extname(fullPath));
-      const fileContent = fs.readFileSync(fullPath, 'utf-8');
-      template = new Knob(fileContent);
-      nameOrPath = name;
+      this.loadSingleTemplate(nameOrNames);
     }
-    this.templates.set(nameOrPath, template);
   }
 
-  static registerPartial(name: string, templateString: string): void {
-    this.partials.set(name, new Knob(templateString));
-  }
-
-  static getPartial(name: string): Knob | undefined {
-    return this.partials.get(name);
+  private static loadSingleTemplate(name: string): void {
+    const templatePath = path.join(this.templatesDir, `${name}.jig`);
+    if (!fs.existsSync(templatePath)) {
+      console.warn(
+        `Template file not found: ${templatePath}. Using empty template.`
+      );
+      this.templates.set(name, new Knob(''));
+    } else {
+      const fileContent = fs.readFileSync(templatePath, 'utf-8');
+      this.templates.set(name, new Knob(fileContent));
+    }
   }
 
   static render(name: string, data: TemplateData): string {
@@ -381,13 +353,6 @@ class JigSaw {
       throw new Error(`Template "${name}" not found`);
     }
     return template.render(data);
-  }
-
-  static setHead(route: string, headContent: string): void {
-    if (!this.routes.has(route)) {
-      throw new Error(`Route "${route}" is not registered`);
-    }
-    this.headContent.set(route, headContent);
   }
 
   private static processHtml(html: string): string {
@@ -425,12 +390,10 @@ class JigSaw {
 
     const processNode = (node: HTMLElement): string => {
       if (node.nodeType === 3) {
-        // Text node
         return node.text;
       }
 
       if (node.nodeType === 1) {
-        // Element node
         const tagName = node.tagName.toLowerCase();
 
         if (tagName === '!doctype') {
@@ -463,242 +426,285 @@ class JigSaw {
   }
 
   static registerRoute(
-    path: string,
-    handler: (params: Record<string, string>) => string
+    routePath: string,
+    handler: (params?: Record<string, string>) => string | Promise<string>
   ): void {
-    this.routes.set(path, (params) => {
-      const rawContent = handler(params);
-      const head = this.headContent.get(path) || '';
-      const navigation = this.config.generateNavigation
-        ? this.generateNavigation()
-        : '';
-      const fullHtml = `<!DOCTYPE html>
-<html>
-  <head>
-    ${head}
-  </head>
-  <body>
-    ${navigation}
-    ${rawContent}
-  </body>
-</html>`;
-      const processedContent = this.processHtml(fullHtml);
-      return processedContent;
+    const paramNames = this.getRouteParams(routePath);
+
+    this.routes.set(routePath, async (params?: Record<string, string>) => {
+      for (const param of paramNames) {
+        if (!(param in params! || params === undefined)) {
+          throw new Error(`Missing required parameter: ${param}`);
+        }
+      }
+
+      const content = await handler(params);
+      const fullHtml = this.processHtml(content);
+      this.updateBuildFile(routePath, fullHtml);
+      return fullHtml;
     });
+
+    this.buildRoute(routePath);
   }
 
-  static handleRoute(path: string): string {
-    const routeHandler = this.routes.get(path);
+  private static getRouteParams(routePath: string): string[] {
+    return routePath
+      .split('/')
+      .filter((part) => part.startsWith(':'))
+      .map((part) => part.slice(1));
+  }
+
+  private static updateBuildFile(routePath: string, content: string): void {
+    const buildPath = path.join(
+      this.buildDir,
+      `${routePath === '/' ? 'index' : routePath}.html`
+    );
+    fs.mkdirSync(path.dirname(buildPath), { recursive: true });
+    fs.writeFileSync(buildPath, content);
+  }
+
+  private static buildRoute(routePath: string): void {
+    const handler = this.routes.get(routePath);
+    if (handler) {
+      const content = handler({});
+      const buildPath = path.join(
+        this.buildDir,
+        `${routePath.slice(1) || 'index'}.html`
+      );
+      fs.writeFileSync(buildPath, content as string);
+    }
+  }
+
+  private static async handleRoute(path: string): Promise<string> {
+    const [routePath, params] = this.matchRoute(path);
+    const routeHandler = this.routes.get(routePath);
     if (routeHandler) {
-      return routeHandler({}); // Simplification: not parsing route params
+      try {
+        return await routeHandler(params);
+      } catch (error) {
+        console.error(`Error handling route ${path}:`, error);
+        return '500 Internal Server Error';
+      }
     }
     return '404 Not Found';
   }
 
-  private static generateNavigation(): string {
-    if (!this.config.generateNavigation) {
-      return ''; // Return empty string if navigation is disabled
+  private static matchRoute(path: string): [string, Record<string, string>] {
+    for (const [routePath, handler] of this.routes) {
+      const routeParts = routePath.split('/');
+      const pathParts = path.split('/');
+
+      if (routeParts.length === pathParts.length) {
+        const params: Record<string, string> = {};
+        let match = true;
+
+        for (let i = 0; i < routeParts.length; i++) {
+          if (routeParts[i].startsWith(':')) {
+            const paramName = routeParts[i].slice(1);
+            params[paramName] = pathParts[i];
+          } else if (routeParts[i] !== pathParts[i]) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          return [routePath, params];
+        }
+      }
     }
-
-    const navItems = Array.from(this.routes.keys())
-      .reverse()
-      .map(
-        (route) =>
-          `<li><a href="${route}">${
-            route === '/' ? 'Home' : route.slice(1)
-          }</a></li>`
-      )
-      .join('');
-
-    return `
-    <nav>
-      <ul>
-        ${navItems}
-      </ul>
-    </nav>
-  `;
+    return ['', {}];
   }
 
-  static startServer(port: number = 3000) {
-    const staticDir = path.join(process.cwd(), 'static');
+  static serve() {
+    fs.mkdirSync(this.buildDir, { recursive: true });
+    this.loadTemplates();
+    this.loadComponents();
+    this.startWatcher();
 
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
-      const pathname = url.pathname;
+      let pathname = url.pathname || '/';
 
-      // Check if the request is for a static file
-      const staticFilePath = path.join(staticDir, pathname);
+      const staticFilePath = path.join(process.cwd(), 'public', pathname);
       if (
         fs.existsSync(staticFilePath) &&
         fs.statSync(staticFilePath).isFile()
       ) {
         const ext = path.extname(staticFilePath);
-        let contentType = 'text/plain';
-
-        switch (ext) {
-          case '.html':
-            contentType = 'text/html';
-            break;
-          case '.css':
-            contentType = 'text/css';
-            break;
-          case '.js':
-            contentType = 'text/javascript';
-            break;
-          case '.json':
-            contentType = 'application/json';
-            break;
-          case '.png':
-            contentType = 'image/png';
-            break;
-          case '.jpg':
-          case '.jpeg':
-            contentType = 'image/jpeg';
-            break;
-        }
+        const contentType = this.getContentType(ext);
 
         res.writeHead(200, { 'Content-Type': contentType });
         fs.createReadStream(staticFilePath).pipe(res);
         return;
       }
 
-      // Handle dynamic routes
-      const route = this.routes.get(pathname);
-      if (route) {
-        const params = {};
-        const content = route(params);
-        console.log(content);
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+      const content = await this.handleRoute(pathname);
+      const statusCode =
+        content.startsWith('4') || content.startsWith('5')
+          ? parseInt(content.slice(0, 3))
+          : 200;
 
-        res.end(`${content}`);
-      } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('404 Not Found');
-      }
+      res.writeHead(statusCode, { 'Content-Type': 'text/html' });
+      res.end(content);
     });
 
-    server.listen(port, () => {
-      console.log(`Server running at http://localhost:${port}/`);
+    server.listen(this.config.port, () => {
+      console.log(`Server running at http://localhost:${this.config.port}/`);
+    });
+  }
+
+  private static getContentType(ext: string): string {
+    const contentTypes: Record<string, string> = {
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.js': 'text/javascript',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+      '.txt': 'text/plain',
+      '.pdf': 'application/pdf',
+      '.xml': 'application/xml',
+      '.mp3': 'audio/mpeg',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.woff': 'font/woff',
+      '.woff2': 'font/woff2',
+      '.ttf': 'font/ttf',
+      '.otf': 'font/otf',
+    };
+
+    return contentTypes[ext.toLowerCase()] || 'application/octet-stream';
+  }
+
+  static loadComponents(): void {
+    if (!fs.existsSync(this.componentsDir)) {
+      console.warn(`Components directory not found: ${this.componentsDir}`);
+      return;
+    }
+
+    const files = fs.readdirSync(this.componentsDir);
+    files.forEach((file) => {
+      if (file.startsWith('_') && file.endsWith('.jig')) {
+        const componentName = file.slice(1, -4);
+        const componentPath = path.join(this.componentsDir, file);
+        const content = fs.readFileSync(componentPath, 'utf-8');
+        this.components.set(componentName, content);
+      }
+    });
+  }
+
+  static getComponent(name: string): string {
+    const component = this.components.get(name);
+    if (!component) {
+      console.warn(`Component not found: ${name}`);
+      return '';
+    }
+    return component;
+  }
+
+  static startWatcher(): void {
+    if (this.watcher) {
+      this.watcher.close();
+    }
+
+    const watchPaths = [this.templatesDir, this.componentsDir];
+
+    this.watcher = chokidar.watch(watchPaths, {
+      ignored: /(^|[\/\\])\../,
+      persistent: true,
+    });
+
+    this.watcher
+      .on('add', (path) => this.handleFileChange(path, 'added'))
+      .on('change', (path) => this.handleFileChange(path, 'changed'))
+      .on('unlink', (path) => this.handleFileChange(path, 'removed'));
+  }
+
+  private static handleFileChange(
+    path: string,
+    changeType: 'added' | 'changed' | 'removed'
+  ): void {
+    const isComponent = path.startsWith(this.componentsDir);
+    const name = isComponent
+      ? this.getComponentNameFromPath(path)
+      : this.getTemplateNameFromPath(path);
+
+    if (changeType === 'removed') {
+      if (isComponent) {
+        this.components.delete(name);
+      } else {
+        this.templates.delete(name);
+      }
+    } else {
+      if (isComponent) {
+        this.loadComponent(path);
+      } else {
+        this.loadTemplate(path);
+      }
+    }
+
+    this.rebuildAllRoutes();
+  }
+
+  private static getComponentNameFromPath(path: string): string {
+    return path.split('/').pop()!.slice(1, -4);
+  }
+
+  private static getTemplateNameFromPath(path: string): string {
+    return path.split('/').pop()!.slice(0, -4);
+  }
+
+  private static loadComponent(path: string): void {
+    const componentName = this.getComponentNameFromPath(path);
+    const content = fs.readFileSync(path, 'utf-8');
+    this.components.set(componentName, content);
+  }
+
+  private static loadTemplate(path: string): void {
+    const templateName = this.getTemplateNameFromPath(path);
+    const content = fs.readFileSync(path, 'utf-8');
+    this.templates.set(templateName, new Knob(content));
+  }
+
+  private static loadTemplates(): void {
+    if (!fs.existsSync(this.templatesDir)) {
+      console.warn(`Templates directory not found: ${this.templatesDir}`);
+      return;
+    }
+
+    const files = fs.readdirSync(this.templatesDir);
+    files.forEach((file) => {
+      if (file.endsWith('.jig')) {
+        const templatePath = path.join(this.templatesDir, file);
+        this.loadTemplate(templatePath);
+      }
+    });
+  }
+  private static rebuildAllRoutes(): void {
+    this.routes.forEach((_, routePath) => {
+      this.buildRoute(routePath);
     });
   }
 }
+
 JigSaw.configure({
-  generateNavigation: true,
+  port: 8750,
 });
 
-// Example usage
-JigSaw.registerTemplate(
-  'profile',
-  `
-<div class="profile">
-  {{ profileImage }}
-  {{ headerName }}
-  {% if bio %}
-    <p>{{ bio }}</p>
-  {% endif %}
-  {{ socialLinks }}
-  {{ githubLink }}
-    <div class="projects">
-    <h2>Projects</h2>
-    {% for project in projects %}
-      <div class="project">
-        <h3><a href="{{ project.url }}">{{ project.name }}</a></h3>
-        <p>{{ project.description }}</p>
-        <ul class="technologies">
-            <li>
-            {{ project.technologies }}
-            </li>
-        </ul>
-      </div>
-    {% endfor %}
-  </div>
-</div>
-`
-);
+JigSaw.registerTemplate(['index', 'profile']);
 
-JigSaw.registerRoute('/profile', (params) => {
-  const data = {
-    userData: {
-      name: 'John Doe',
-    },
-    bio: 'Web developer and TypeScript enthusiast',
-    profileImage: {
-      tag: 'img',
-      props: {
-        src: 'https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?q=80&w=1856&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-        alt: 'user image',
-        class: 'profile-image',
-      },
-    },
-    headerName: {
-      type: 'header',
-      level: 1,
-      text: 'John Doe',
-      id: 'profile-name',
-    },
-    socialLinks: {
-      tag: 'div',
-      props: { class: 'social-links' },
-      children: [
-        {
-          tag: 'a',
-          props: { href: 'https://twitter.com/johndoe' },
-          content: 'Twitter',
-        },
-        {
-          tag: 'a',
-          props: { href: 'https://github.com/johndoe' },
-          content: 'GitHub',
-        },
-      ],
-    },
-    githubLink: {
-      type: 'link',
-      href: 'https://github.com/johndoe',
-      text: 'Check out my GitHub',
-      title: "John Doe's GitHub Profile",
-    },
-    projects: [
-      {
-        name: 'TypeScript Task Manager',
-        description:
-          'A command-line task management tool built with TypeScript',
-        url: 'https://github.com/janesmith/ts-task-manager',
-        technologies: ['Node.js', 'TypeScript', 'Commander.js'],
-      },
-      {
-        name: 'React Weather App',
-        description: 'A weather application using React and OpenWeatherMap API',
-        url: 'https://weather.janesmith.dev',
-        technologies: ['React', 'JavaScript', 'OpenWeatherMap API'],
-      },
-
-      {
-        name: 'Express Blog API',
-        description:
-          'RESTful API for a blog application built with Express and MongoDB',
-        url: 'https://github.com/janesmith/express-blog-api',
-        technologies: 'Express.js',
-      },
-    ],
-  };
+JigSaw.registerRoute('/profile', async (params) => {
+  const data = await fetchUserData('2');
   return JigSaw.render('profile', data);
 });
 
-JigSaw.setHead(
-  '/profile',
-  `
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>User Profile</title>
-  <link rel="stylesheet" href="/styles/profile.css">
-`
-);
-JigSaw.registerTemplate('./templates/home.html');
-
 JigSaw.registerRoute('/', (params) => {
-  return JigSaw.render('home', { title: 'Welcome' });
+  return JigSaw.render('index', { title: 'Welcome' });
 });
 
-// Start the server
-JigSaw.startServer(8750);
+JigSaw.serve();
