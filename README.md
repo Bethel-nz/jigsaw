@@ -1,6 +1,6 @@
 # JigSaw Templating Engine Documentation
 
-JigSaw is a powerful, flexible templating engine for Node.js applications, written in TypeScript. It provides a straightforward approach to creating dynamic HTML content, complete with support for partials, control structures, and component-like rendering.
+JigSaw is a lightweight, flexible templating engine for Node.js applications, written in TypeScript. It provides a straightforward approach to creating dynamic HTML content, complete with support for partials, control structures, and component-like rendering.
 
 ## Key Features
 
