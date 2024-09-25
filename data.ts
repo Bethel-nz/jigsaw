@@ -39,10 +39,16 @@ interface UserData {
 
 export async function fetchUserData(userId: string): Promise<UserData> {
   // Simulate an asynchronous operation
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  return {
+  const minDelay = 1000;
+  const maxDelay = 3000;
+  const randomDelay =
+    Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay; // delayed the function randomly async op
+
+  await new Promise((resolve) => setTimeout(resolve, randomDelay));
+
+  const data = {
     userData: {
-      name: userId === '1' ? 'John Doe' : 'Jane Doe',
+      name: 'Test',
     },
     bio: 'Web developer and TypeScript enthusiast',
     profileImage: {
@@ -53,7 +59,12 @@ export async function fetchUserData(userId: string): Promise<UserData> {
     headerName: {
       type: 'header',
       level: 1,
-      text: 'John Doe',
+      text:
+        userId === '1'
+          ? 'John Doe'
+          : userId === '2'
+          ? 'Jane Doe'
+          : 'Tommy Kelson',
       id: 'profile-name',
     },
     socialLinks: {
@@ -101,4 +112,6 @@ export async function fetchUserData(userId: string): Promise<UserData> {
       },
     ],
   };
+
+  return data;
 }
