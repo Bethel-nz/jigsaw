@@ -40,6 +40,7 @@ class JigSaw {
 
   private static loadSingleTemplate(name: string): void {
     const templatePath = path.join(this.templatesDir, `${name}.jig`);
+    console.log(`Attempting to load template: ${templatePath}`);
     if (!fs.existsSync(templatePath)) {
       console.warn(
         `Template file not found: ${templatePath}. Using empty template.`
@@ -48,6 +49,7 @@ class JigSaw {
     } else {
       const fileContent = fs.readFileSync(templatePath, 'utf-8');
       this.templates.set(name, new Knob(fileContent));
+      console.log(`Successfully loaded template: ${name}`);
     }
   }
 
@@ -133,7 +135,7 @@ class JigSaw {
     routePath: string,
     handler: (params?: Record<string, string>) => string | Promise<string>
   ): void {
-    const paramNames = this.getRouteParams(routePath);
+    const paramNames = this.getRouteParams(routePath.replace(/_-/g, ':'));
 
     if (paramNames.length === 0) {
       this.parentRoutes.add(routePath);

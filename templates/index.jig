@@ -9,17 +9,10 @@
 </head>
 
 <body>
-	<nav>
-		<ul>
-			<li><a href="/">Home</a></li>
-			<li><a href="/profile/1">Profile 1</a></li>
-			<li><a href="/profile/2">Profile 2</a></li>
-			<li><a href="/profile/3">Profile 3</a></li>
-		</ul>
-	</nav>
+	{{{navigation}}}
 	<div class="profile">
 		<h1>{{ title }}</h1>
-		<p>Welcome to our JigSaw Profiles showcase! Click on the links above to view different user profiles.</p>
+		<p>Welcome to our JigSaw Profiles showcase! Click on the "Profiles" link above to view all profiles.</p>
 	</div>
 </body>
 

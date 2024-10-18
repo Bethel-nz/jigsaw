@@ -6,6 +6,10 @@
   box-sizing: border-box;
 }
 
+*, a {
+  text-decoration: none;
+}
+
 body {
   font-family: "Outfit", sans-serif;
   font-optical-sizing: auto;
@@ -25,8 +29,8 @@ body {
 nav {
   background-color: #ffffff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  padding: 1rem 0;
-  margin-bottom: 2rem;
+  padding: 0.5rem 0;
+  margin-bottom: 1rem;
 }
 
 nav ul {
@@ -37,7 +41,6 @@ nav ul {
 }
 
 nav a {
-  text-decoration: none;
   color: #4a5568;
   font-weight: 600;
   transition: color 0.3s ease;
@@ -49,26 +52,28 @@ nav a:hover {
 
 /* Profile */
 .profile {
+  max-width: 800px;
+  margin: 0 auto;
   background-color: #ffffff;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  padding: 2rem;
-  margin-bottom: 2rem;
+  padding: 1.5rem;
 }
 
 .profile-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .profile-image {
-  width: 200px;
-  height: 200px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
-  object-fit: cover;
+  -o-object-fit: cover;
+     object-fit: cover;
   margin: 0 auto 1rem;
   display: block;
-  border: 4px solid #4299e1;
+  border: 3px solid #4299e1;
   transition: transform 0.3s ease;
 }
 
@@ -83,51 +88,57 @@ nav a:hover {
 
 .bio {
   color: #4a5568;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 /* Social Links */
+.links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
 .social-links {
   display: flex;
   justify-content: center;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
 }
 
-.social-links a {
+.social-links a, .view-profile {
   background-color: #4299e1;
   color: #ffffff;
   padding: 0.5rem 1rem;
   border-radius: 4px;
-  text-decoration: none;
   transition: background-color 0.3s ease;
 }
 
-.social-links a:hover {
+.social-links a:hover, .view-profile:hover {
   background-color: #2b6cb0;
 }
 
 /* Projects */
 .projects {
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
 .projects-title {
   text-align: center;
   color: #2d3748;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .project {
   background-color: #ebf8ff;
   border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .project:hover {
-  transform: translateY(-5px);
+  transform: translateY(-3px);
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
@@ -138,16 +149,15 @@ nav a:hover {
 
 .project p {
   color: #4a5568;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .project-link {
   display: inline-block;
   background-color: #4299e1;
   color: #ffffff;
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  text-decoration: none;
   transition: background-color 0.3s ease;
 }
 
@@ -160,7 +170,7 @@ nav a:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
 }
 
 .technologies li {
@@ -172,23 +182,88 @@ nav a:hover {
   list-style-type: none;
 }
 
+/* Profiles Container */
+.profiles-container {
+  max-width: 40em;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.profiles-container h1 {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.profile-card {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+.profile-card .profile-image {
+  width: 100px;
+  height: 100px;
+  -o-object-fit: cover;
+     object-fit: cover;
+  margin-right: 1rem;
+}
+
+.profile-card .squircle {
+  border-radius: 20px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M100 50C100 77.6142 77.6142 100 50 100C22.3858 100 0 77.6142 0 50C0 22.3858 22.3858 0 50 0C77.6142 0 100 22.3858 100 50Z' fill='black'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M100 50C100 77.6142 77.6142 100 50 100C22.3858 100 0 77.6142 0 50C0 22.3858 22.3858 0 50 0C77.6142 0 100 22.3858 100 50Z' fill='black'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
+}
+
+.profile-card-content {
+  flex: 1;
+}
+
+.profile-card h2 {
+  margin-bottom: 0.25rem;
+}
+
+.profile-card p {
+  margin-bottom: 0.5rem;
+}
+
+.view-profile {
+  display: inline-block;
+  background-color: #4299e1;
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: background-color 0.3s ease;
+}
+
+.view-profile:hover {
+  background-color: #2b6cb0;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
-  .profile {
-    padding: 1.5rem;
+  .profiles-container {
+    max-width: 100%;
+    padding: 0.5rem;
   }
 
-  .profile-image {
-    width: 150px;
-    height: 150px;
-  }
-
-  .social-links {
+  .profile-card {
     flex-direction: column;
-    align-items: center;
+    text-align: center;
   }
 
-  .project {
-    padding: 1rem;
+  .profile-card .profile-image {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
   }
 }

@@ -1,20 +1,19 @@
-import { fetchUserData } from './data';
+import { fetchUserData, fetchProfiles } from './data';
 
 import JigSaw from './src/jigsaw';
 
 const jigsaw = JigSaw;
 
-jigsaw.template(['index', 'profile', 'profile:id']); // added param support
+jigsaw.template(['index', 'profiles', 'profile_-id']);
 
-jigsaw.route('/profile', async (params) => {
-  const data = await fetchUserData('1');
-  return jigsaw.render('profile', data);
+jigsaw.route('/profiles', async () => {
+  const profiles = await fetchProfiles();
+  return jigsaw.render('profiles', { profiles });
 });
 
-// would break if you just do /profile/2 without /:id
 jigsaw.route('/profile/:id', async (params) => {
   const data = await fetchUserData(params?.id!);
-  return jigsaw.render('profile', data);
+  return jigsaw.render('profile_-id', data);
 });
 
 jigsaw.route('/', (params) => {

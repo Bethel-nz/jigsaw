@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Profiles</title>
+	<link rel="stylesheet" href="/static/styles/profile.css">
+</head>
+
+<body>
+	{{{navigation}}}
+	<div class="profiles-container">
+		<h1>Profiles</h1>
+		{% for profile in profiles %}
+		<div class="profile-card">
+			<img src="{{ profile.imageUrl }}" alt="{{ profile.name }}" class="profile-image squircle">
+			<div class="profile-card-content">
+				<h2>{{ profile.name }}</h2>
+				<p>{{ profile.bio }}</p>
+				<a href="/profile/{{ profile.id }}" class="view-profile">View Profile</a>
+			</div>
+		</div>
+		{% endfor %}
+	</div>
+</body>
+
+</html>
