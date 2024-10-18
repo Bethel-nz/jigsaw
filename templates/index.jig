@@ -5,18 +5,22 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>{{ title }}</title>
+	<link rel="stylesheet" href="/static/styles/profile.css">
 </head>
 
 <body>
-	<header>
+	<nav>
+		<ul>
+			<li><a href="/">Home</a></li>
+			<li><a href="/profile/1">Profile 1</a></li>
+			<li><a href="/profile/2">Profile 2</a></li>
+			<li><a href="/profile/3">Profile 3</a></li>
+		</ul>
+	</nav>
+	<div class="profile">
 		<h1>{{ title }}</h1>
-	</header>
-	<main>
-		<p>Welcome to our website!</p>
-	</main>
-	<footer>
-		<p>&copy; 2024 Your Website Name</p>
-	</footer>
+		<p>Welcome to our JigSaw Profiles showcase! Click on the links above to view different user profiles.</p>
+	</div>
 </body>
 
 </html>
