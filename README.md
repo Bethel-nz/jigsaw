@@ -7,13 +7,13 @@ JigSaw is a lightweight templating engine for Node.js applications, written in T
 ### Prerequisites
 
 - Node.js (version 12 or higher)
-- Bun (for package management and running the project)
+- Bun (for package management and running the project) but any package manager will work
 
 ### Installation
 
 ```bash
 git clone https://github.com/Bethel-nz/jigsaw.git
-cd jigsaw-templating-engine
+cd jigsaw
 bun i
 ```
 
@@ -29,17 +29,16 @@ bun i
 
    ```typescript
    // Register templates
-   JigSaw.registerTemplate(['index', 'profile']);
+   JigSaw.template(['index', 'profile']);
 
    // Register a route
-   JigSaw.registerRoute('/profile/:id', async (params) => {
+   JigSaw.route('/profile/:id', async (params) => {
      const data = await fetchUserData(params!.id);
      return JigSaw.render('profile', data);
    });
 
    // Configure and start the server
-   JigSaw.configure({ port: 8750 });
-   JigSaw.serve();
+   JigSaw.serve({ port: 8750 });
    ```
 
 ## Template Syntax
