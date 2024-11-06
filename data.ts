@@ -121,6 +121,7 @@ export interface ProfileSummary {
   name: string;
   bio: string;
   imageUrl: string;
+  featured?: boolean;
 }
 
 export async function fetchProfiles(): Promise<ProfileSummary[]> {
@@ -132,15 +133,15 @@ export async function fetchProfiles(): Promise<ProfileSummary[]> {
       id: '1',
       name: 'John Doe',
       bio: 'Web developer and TypeScript enthusiast',
-      imageUrl:
-        'https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?q=80&w=1856&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+      imageUrl: 'https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?q=80&w=1856&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+    
     },
     {
       id: '2',
       name: 'Jane Smith',
       bio: 'UX designer and React developer',
-      imageUrl:
-        'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-    },
+      imageUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=1887&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+      
+    }
   ];
 }
