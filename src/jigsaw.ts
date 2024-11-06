@@ -1,5 +1,5 @@
 import Knob from './knob';
-import { TemplateData, JigSawConfig, CachedRoute } from '../types';
+import { TemplateData, JigSawConfig, CachedRoute } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as http from 'http';
@@ -61,8 +61,24 @@ class JigSaw {
     return template.render(data);
   }
 
-  private static processHtml(html: string): string {
+  private static processHtml(html: string, data?: TemplateData): string {
     const root = parse(html);
+    const arrayLengths = new Map<string, number>();
+
+    // Calculate array lengths from data
+    if (data) {
+      Object.entries(data).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          arrayLengths.set(key, value.length);
+        }
+      });
+    }
+
+    // Add array lengths as a data attribute to the root element
+    if (arrayLengths.size > 0) {
+      const lengthsData = JSON.stringify(Object.fromEntries(arrayLengths));
+      root.setAttribute('data-array-lengths', lengthsData);
+    }
 
     const isElementEmpty = (element: HTMLElement): boolean => {
       return (
@@ -126,16 +142,19 @@ class JigSaw {
       return '';
     };
 
-    return root.childNodes
+    const processedHtml = root.childNodes
       .map((child) => processNode(child as HTMLElement))
       .join('');
+
+    return this.cleanupEmptyElements(processedHtml);
   }
 
   static route(
     routePath: string,
     handler: (params?: Record<string, string>) => string | Promise<string>
   ): void {
-    const paramNames = this.getRouteParams(routePath.replace(/_-/g, ':'));
+    const templatePath = routePath.replace(/:/g, '$');
+    const paramNames = this.getRouteParams(routePath);
 
     if (paramNames.length === 0) {
       this.parentRoutes.add(routePath);
@@ -187,11 +206,25 @@ class JigSaw {
         }
 
         const content = await routeHandler(params);
+        
+        // Extract data from the route handler's response
+        let data = {};
+        try {
+          const dataAttr = content.match(/data-jigsaw="([^"]*)"/);
+          if (dataAttr && dataAttr[1]) {
+            data = JSON.parse(decodeURIComponent(dataAttr[1]));
+          }
+        } catch (e) {
+          console.warn('Failed to parse data-jigsaw attribute:', e);
+        }
+
+        const cleanedContent = this.cleanupEmptyElements(content, data);
+        
         this.routeCache.set(cacheKey, {
-          content,
+          content: cleanedContent,
           lastUpdated: Date.now(),
         });
-        return content;
+        return cleanedContent;
       } catch (error) {
         console.error(`Error handling route ${path}:`, error);
         return '500 Internal Server Error';
@@ -420,6 +453,95 @@ class JigSaw {
 
   private static clearCache(): void {
     this.routeCache.clear();
+  }
+
+  private static cleanupEmptyElements(html: string, data?: TemplateData): string {
+    const root = parse(html);
+    
+    const selfClosingTags = new Set([
+      'img', 'br', 'hr', 'input', 'meta', 'link', 'area',
+      'base', 'col', 'embed', 'param', 'source', 'track', 'wbr'
+    ]);
+
+    const getElementSignature = (element: HTMLElement): string => {
+      const attrs = element.rawAttrs ? ` ${element.rawAttrs}` : '';
+      const children = Array.from(element.childNodes)
+        .filter(node => node.nodeType === 1)
+        .map(child => getElementSignature(child as HTMLElement))
+        .join('');
+      return `<${element.tagName}${attrs}>${children}</${element.tagName}>`;
+    };
+
+    const findRepeatingElements = (container: HTMLElement): Map<string, HTMLElement[]> => {
+      const elementGroups = new Map<string, HTMLElement[]>();
+      
+      const elements = container.querySelectorAll('*[class]');
+      elements.forEach(el => {
+        const classAttr = (el as HTMLElement).getAttribute('class');
+        if (!classAttr) return;
+        
+        const classes = classAttr.split(/\s+/);
+        classes.forEach(className => {
+          if (!elementGroups.has(className)) {
+            elementGroups.set(className, []);
+          }
+          elementGroups.get(className)!.push(el as HTMLElement);
+        });
+      });
+
+      return new Map(
+        Array.from(elementGroups.entries())
+          .filter(([_, elements]) => elements.length > 1)
+      );
+    };
+
+    const compareAndCleanup = (elements: HTMLElement[]) => {
+      if (elements.length < 2) return;
+
+      // Get the first element as template
+      const templateElement = elements[0];
+      const templateSignature = getElementSignature(templateElement);
+      const templateChildCount = templateElement.querySelectorAll('*').length;
+
+      // Compare subsequent elements
+      for (let i = 1; i < elements.length; i++) {
+        const currentElement = elements[i];
+        const currentChildCount = currentElement.querySelectorAll('*').length;
+        const currentSignature = getElementSignature(currentElement);
+
+        // If current element has fewer children or different structure, remove it
+        if (currentChildCount < templateChildCount || 
+            currentSignature.length < templateSignature.length) {
+          currentElement.remove();
+        }
+      }
+    };
+
+    const processNode = (node: HTMLElement): void => {
+      if (node.rawAttrs && data) {
+        const repeatingGroups = findRepeatingElements(node);
+        repeatingGroups.forEach((elements) => {
+          compareAndCleanup(elements);
+        });
+      }
+
+      // Process children
+      const children = Array.from(node.childNodes);
+      children.forEach(child => {
+        if (child.nodeType === 1) {
+          processNode(child as HTMLElement);
+        }
+      });
+    };
+
+    // Process all root-level elements
+    root.childNodes.forEach(child => {
+      if (child.nodeType === 1) {
+        processNode(child as HTMLElement);
+      }
+    });
+
+    return root.toString();
   }
 }
 

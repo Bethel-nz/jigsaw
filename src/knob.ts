@@ -3,17 +3,19 @@ import {
   ComponentDefinition,
   HeaderDefinition,
   LinkDefinition,
-} from '../types';
+} from './types';
 import JigSaw from './jigsaw';
 
 class Knob {
   private readonly template: string;
+  private processingBlocks: Set<string> = new Set();
 
   constructor(template: string) {
     this.template = template;
   }
 
   render(data: TemplateData): string {
+    this.processingBlocks.clear();
     return this.renderContent(this.processComponents(data), data);
   }
 
@@ -40,12 +42,26 @@ class Knob {
       result += content.slice(lastIndex, match.index);
       const expression = match[0];
 
-      if (expression.startsWith('{{')) {
-        const innerExpression = expression.slice(2, -2).trim();
-        result += this.evaluateExpression(innerExpression, data);
-      } else if (expression.startsWith('{%')) {
-        const controlStructure = expression.slice(2, -2).trim();
-        result += this.processControlStructure(controlStructure, data);
+      const expressionKey = `${match.index}-${expression}`;
+      
+      if (this.processingBlocks.has(expressionKey)) {
+        result += expression;
+        lastIndex = regex.lastIndex;
+        continue;
+      }
+
+      this.processingBlocks.add(expressionKey);
+
+      try {
+        if (expression.startsWith('{{')) {
+          const innerExpression = expression.slice(2, -2).trim();
+          result += this.evaluateExpression(innerExpression, data);
+        } else if (expression.startsWith('{%')) {
+          const controlStructure = expression.slice(2, -2).trim();
+          result += this.processControlStructure(controlStructure, data);
+        }
+      } finally {
+        this.processingBlocks.delete(expressionKey);
       }
 
       lastIndex = regex.lastIndex;
@@ -55,12 +71,12 @@ class Knob {
     return result;
   }
 
-  private processControlStructure(
-    structure: string,
-    data: TemplateData
-  ): string {
+  private processControlStructure(structure: string, data: TemplateData): string {
     const [keyword, ...rest] = structure.split(/\s+/);
     const condition = rest.join(' ');
+
+    const blockContent = this.extractBlock(keyword, condition);
+    if (!blockContent) return '';
 
     if (keyword === 'if') {
       return this.processIfStatement(condition, data);
@@ -71,123 +87,133 @@ class Knob {
     return '';
   }
 
-  private processIfStatement(condition: string, data: TemplateData): string {
-    const result = this.evaluateCondition(condition, data);
-
-    const ifStartTag = `{% if ${condition} %}`;
-    const ifEndTag = '{% endif %}';
-    const elseTag = '{% else %}';
-    const elseEndTag = '{% endelse %}';
-
-    const ifBlock = this.extractBlock('if', condition);
-    const elseBlock = this.extractBlock('else');
-    if (result) {
-      if (
-        ifBlock &&
-        ifBlock.includes(ifStartTag) &&
-        ifBlock.includes(ifEndTag)
-      ) {
-        const content = ifBlock.slice(
-          ifStartTag.length,
-          ifBlock.lastIndexOf(ifEndTag)
-        );
-        return this.renderContent(content, data);
-      }
-    } else if (
-      elseBlock &&
-      elseBlock.startsWith(elseTag) &&
-      elseBlock.endsWith(elseEndTag)
-    ) {
-      const content = elseBlock.slice(
-        elseTag.length,
-        elseBlock.lastIndexOf(elseEndTag)
-      );
-      return this.renderContent(content, data);
-    }
-
-    return '';
-  }
-
   private processForLoop(condition: string, data: TemplateData): string {
     const [item, , collection] = condition.split(' ');
     const items = this.getValueFromData(collection, data);
-    const loopBlock = this.extractBlock('for', condition);
 
-    if (!Array.isArray(items)) return '';
+    if (!Array.isArray(items)) {
+      console.warn(`Data for collection "${collection}" is not an array`);
+      return '';
+    }
+
+    const loopBlock = this.extractBlock('for', condition);
+    if (!loopBlock) return '';
 
     let result = '';
-    items.forEach((itemData, index) => {
-      const itemContext = {
-        ...data,
-        [item]: itemData,
-        [`${item}_index`]: index,
-        [`${item}_first`]: index === 0,
-        [`${item}_last`]: index === items.length - 1,
-      };
-      result += this.renderContent(loopBlock, itemContext);
-    });
+    const loopKey = `for-${item}-${collection}`;
+    
+    if (this.processingBlocks.has(loopKey)) {
+      return '';
+    }
+
+    this.processingBlocks.add(loopKey);
+
+    try {
+      for (let i = 0; i < items.length; i++) {
+        const itemData = items[i];
+        if (itemData == null) continue;
+
+        let processedBlock = loopBlock;
+        const firstElementMatch = processedBlock.match(/^(\s*)<([^>]+)>/);
+        if (firstElementMatch) {
+          const [fullMatch, whitespace, tag] = firstElementMatch;
+          const replacement = `${whitespace}<${tag} data-loop-index="${i}" data-loop-collection="${collection}">`;
+          processedBlock = processedBlock.replace(fullMatch, replacement);
+        }
+
+        const itemContext = {
+          ...data,
+          [item]: itemData,
+          [`${item}_index`]: i,
+          [`${item}_first`]: i === 0,
+          [`${item}_last`]: i === items.length - 1,
+        };
+
+        result += this.renderContent(processedBlock, itemContext);
+      }
+    } finally {
+      this.processingBlocks.delete(loopKey);
+    }
 
     return result;
   }
 
-  private extractBlock(
-    blockType: string,
-    condition?: string,
-    data?: TemplateData
-  ): string {
-    let startTag = condition
-      ? `{% ${blockType} ${condition} %}`
-      : `{% ${blockType} %}`;
-    const endTag = `{% end${blockType} %}`;
-    let depth = 0;
-    let startIndex = this.template.indexOf(startTag);
-    let endIndex = startIndex;
+  private processIfStatement(condition: string, data: TemplateData): string {
+    const result = this.evaluateCondition(condition, data);
+    const ifBlock = this.extractBlock('if', condition);
+    
+    if (!ifBlock) return '';
 
-    if (blockType === 'if' && condition && data) {
-      const conditionResult = this.evaluateCondition(condition, data);
+    const elseTag = '{% else %}';
+    const elseIndex = ifBlock.indexOf(elseTag);
+    
+    // Split content into if and else blocks
+    const ifContent = elseIndex !== -1 ? ifBlock.slice(0, elseIndex) : ifBlock;
+    const elseContent = elseIndex !== -1 ? ifBlock.slice(elseIndex + elseTag.length) : '';
 
-      if (!conditionResult) {
-        const elseTag = '{% else %}';
-        const elseIndex = this.template.indexOf(elseTag, startIndex);
-        if (
-          elseIndex !== -1 &&
-          elseIndex < this.template.indexOf(endTag, startIndex)
-        ) {
-          startIndex = elseIndex;
-          startTag = elseTag;
-        } else {
-          return '';
+    // Find the immediate wrapped element
+    const elementRegex = /^\s*(<[^>]+>)([\s\S]*?)(<\/[^>]+>)\s*$/;
+    const ifMatch = ifContent.match(elementRegex);
+    const elseMatch = elseContent ? elseContent.match(elementRegex) : null;
+
+    let renderedContent = '';
+    
+    if (result) {
+      // If condition is true, render the if block
+      if (ifMatch) {
+        const [, openTag, content, closeTag] = ifMatch;
+        const processedContent = this.renderContent(content, data);
+        if (processedContent.trim()) {
+          renderedContent = `${openTag}${processedContent}${closeTag}`;
         }
+      } else {
+        renderedContent = this.renderContent(ifContent, data);
+      }
+    } else if (elseContent) {
+      // If condition is false and else block exists, render the else block
+      if (elseMatch) {
+        const [, openTag, content, closeTag] = elseMatch;
+        const processedContent = this.renderContent(content, data);
+        if (processedContent.trim()) {
+          renderedContent = `${openTag}${processedContent}${closeTag}`;
+        }
+      } else {
+        renderedContent = this.renderContent(elseContent, data);
       }
     }
 
-    while (endIndex < this.template.length) {
-      const nextStart = this.template.indexOf(`{% ${blockType}`, endIndex + 1);
-      const nextEnd = this.template.indexOf(endTag, endIndex + 1);
+    return renderedContent;
+  }
+
+  private extractBlock(blockType: string, condition?: string): string {
+    const startTag = condition ? `{% ${blockType} ${condition} %}` : `{% ${blockType} %}`;
+    const endTag = `{% end${blockType} %}`;
+    
+    const startIndex = this.template.indexOf(startTag);
+    if (startIndex === -1) return '';
+
+    let depth = 1;
+    let currentIndex = startIndex + startTag.length;
+
+    while (currentIndex < this.template.length) {
+      const nextStart = this.template.indexOf(`{% ${blockType}`, currentIndex);
+      const nextEnd = this.template.indexOf(endTag, currentIndex);
+
+      if (nextEnd === -1) return '';
+      
       if (nextStart !== -1 && nextStart < nextEnd) {
         depth++;
-        endIndex = nextStart;
-      } else if (nextEnd !== -1) {
-        if (depth === 0) {
-          endIndex = nextEnd;
-          break;
-        }
-        depth--;
-        endIndex = nextEnd;
+        currentIndex = nextStart + startTag.length;
       } else {
-        break;
+        depth--;
+        if (depth === 0) {
+          return this.template.slice(startIndex + startTag.length, nextEnd);
+        }
+        currentIndex = nextEnd + endTag.length;
       }
     }
 
-    if (startIndex === -1 || endIndex === -1) {
-      return '';
-    }
-
-    const extractedBlock = this.template.slice(
-      startIndex + startTag.length,
-      endIndex
-    );
-    return extractedBlock;
+    return '';
   }
 
   private evaluateExpression(expression: string, data: TemplateData): string {
@@ -238,20 +264,8 @@ class Knob {
     }
 
     const voidElements = [
-      'img',
-      'br',
-      'hr',
-      'input',
-      'meta',
-      'link',
-      'area',
-      'base',
-      'col',
-      'embed',
-      'param',
-      'source',
-      'track',
-      'wbr',
+      'img', 'br', 'hr', 'input', 'meta', 'link', 'area',
+      'base', 'col', 'embed', 'param', 'source', 'track', 'wbr'
     ];
 
     if (voidElements.includes(tag)) {
@@ -277,4 +291,5 @@ class Knob {
     return `<h${level}${idAttr}>${text}</h${level}>`;
   }
 }
+
 export default Knob;

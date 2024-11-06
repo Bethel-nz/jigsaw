@@ -8,7 +8,7 @@
 	<link rel="stylesheet" href="/static/styles/profile.css">
 </head>
 
-<body>
+<body data-jigsaw="{{ encodeURIComponent(JSON.stringify(profiles)) }}">
 	{{{navigation}}}
 	<div class="profiles-container">
 		<h1>Profiles</h1>
@@ -18,6 +18,7 @@
 			<div class="profile-card-content">
 				<h2>{{ profile.name }}</h2>
 				<p>{{ profile.bio }}</p>
+
 				<a href="/profile/{{ profile.id }}" class="view-profile">View Profile</a>
 			</div>
 		</div>
