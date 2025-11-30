@@ -1,0 +1,117 @@
+@meta {{
+  title: "Home - Jigsaw Demo Home Page",
+  description: "Welcome to the Jigsaw demo site."
+}}
+
+@script(src="/static/analytics.js" defer)
+
+<div class="hero">
+  <h1>Welcome to Jigsaw</h1>
+  <p style="font-size: 1.2rem; color: #888; max-width: 600px;">
+    A modern template engine featuring Islands Architecture and View Transitions.
+    Navigate around to se the smooth animations and persistent player state.
+  </p>
+  <button @click="console.log('Hello from Jigsaw @click!')" style="padding: 0.5rem 1rem; margin-top: 1rem; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer;">Test @click</button>
+</div>
+
+<div style="margin: 2rem 0; padding: 2rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg);">
+  <h2>Event Playground</h2>
+  <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+    
+    <!-- Input Events -->
+    <div style="background: var(--bg); padding: 1rem; border-radius: 4px; border: 1px solid var(--border);">
+      <h3>@input & @change</h3>
+      <input type="text" 
+        @input="$el.nextElementSibling.textContent = 'Typing: ' + $el.value"
+        @change="console.log('Changed:', $el.value)"
+        placeholder="Type here..."
+        style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;">
+      <div style="color: #888; font-size: 0.9rem;">Waiting for input...</div>
+    </div>
+
+    <!-- Mouse Events -->
+    <div style="background: var(--bg); padding: 1rem; border-radius: 4px; border: 1px solid var(--border); transition: border-color 0.3s;"
+      @mouseenter="$el.style.borderColor = 'var(--accent)'"
+      @mouseleave="$el.style.borderColor = 'var(--border)'">
+      <h3>@mouseenter / leave</h3>
+      <p>Hover over this card to see the border change color.</p>
+    </div>
+
+    <!-- Focus Events -->
+    <div style="background: var(--bg); padding: 1rem; border-radius: 4px; border: 1px solid var(--border);">
+      <h3>@focus & @blur</h3>
+      <input type="text" 
+        @focus="$el.style.borderColor = 'var(--accent)'"
+        @blur="$el.style.borderColor = 'var(--border)'"
+        placeholder="Focus me..."
+        style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); outline: none; background: var(--card-bg); color: var(--text); border-radius: 4px;">
+    </div>
+
+    <!-- Form Events -->
+    <div style="background: var(--bg); padding: 1rem; border-radius: 4px; border: 1px solid var(--border);">
+      <h3>@submit</h3>
+      <form @submit="event.preventDefault(); alert('Form submitted with: ' + $el.querySelector('input').value)">
+        <input type="text" placeholder="Enter name" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px;">
+        <button type="submit" style="background: var(--accent); color: white; border: none; padding: 0.25rem 0.5rem; cursor: pointer; border-radius: 4px;">Submit</button>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<div class="grid">
+  {{{ card(:title="Islands Architecture", :description="Persistent components that stay alive across navigation.") / }}}
+  {{{ card(:title="View Transitions", :description="Native browser animations for smooth page loads.") / }}}
+  {{{ card(:title="Component Props", :description="Pass data to components cleanly and easily.") / }}}
+</div>
+
+<div style="margin-top: 4rem;">
+  <h2>Interactive Island with @fn and Slots</h2>
+  {{{ card(:title="Interactive Counter") }}}
+    <p>This content is injected via a <b>Fragment</b> (Slot).</p>
+    
+    @fn increment(amount) {
+        $state.count += amount;
+        if ($state.count > 10) $el.style.borderColor = 'red';
+    }
+
+    @fn reset() {
+        $state.count = 0;
+        $el.style.borderColor = 'var(--border)';
+    }
+
+    <div style="margin-top: 1rem; padding: 1rem; background: var(--bg); border-radius: 4px;">
+        <p>Count: <span @text="$state.count" @init="0">0</span></p>
+        <button @click="increment(1)" style="margin-right: 0.5rem;">+1</button>
+        <button @click="increment(5)" style="margin-right: 0.5rem;">+5</button>
+        <button @click="reset()">Reset</button>
+    </div>
+  {{{ /card }}}
+</div>
+
+<div style="margin-top: 4rem;">
+  <h2>Latest from the Blog</h2>
+  <div class="grid">
+    {% for post in posts %}
+      <a href="/blog/{{ post.id }}" class="card" data-transition="slide-left">
+        <h3>{{ post.title }}</h3>
+        <p>{{ post.excerpt }}</p>
+      </a>
+    {% endfor %}
+  </div>
+  </div>
+</div>
+
+<div style="margin-top: 4rem;">
+  <h2>Client-Side State Demo</h2>
+  <div class="card">
+    <p>
+      Count: <span @state="count" @init="0">0</span>
+    </p>
+    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+      <button @click="$state.count++" style="padding: 0.5rem 1rem; cursor: pointer;">Increment</button>
+      <button @click="$state.count--" style="padding: 0.5rem 1rem; cursor: pointer;">Decrement</button>
+    </div>
+  </div>
+</div>
+ 

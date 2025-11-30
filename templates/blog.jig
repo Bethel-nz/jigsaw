@@ -1,0 +1,16 @@
+<div class="blog-header">
+  <h1>Blog</h1>
+  <p>Thoughts on modern web development.</p>
+</div>
+
+<div class="grid">
+  {% for post in posts %}
+    <a href="/blog/{{ post.id }}" class="card" data-transition="slide-left">
+      <h3>{{ post.title }}</h3>
+      <p>{{ post.excerpt }}</p>
+      <div style="margin-top: 1rem; font-size: 0.8rem; color: #666;">
+        Read more →
+      </div>
+    </a>
+  {% endfor %}
+</div>

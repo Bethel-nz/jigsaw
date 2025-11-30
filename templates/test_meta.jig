@@ -1,0 +1,17 @@
+@meta {{
+  title: "Test Page",
+  description: "Testing meta tags",
+  link: (rel: "stylesheet", href: "/static/test.css")
+}}
+
+<div id="app">
+  <h1>{{ title }}</h1>
+  
+  <button @click="console.log('Clicked!')">Click Me</button>
+  
+  <input type="text" @input="console.log(el.value)" placeholder="Type here...">
+  
+  <div @sync="user.name">
+    {{ user.name }}
+  </div>
+</div>
