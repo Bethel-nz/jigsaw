@@ -1,0 +1,15 @@
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h2>Notes</h2>
+    <button @click="createNote" class="new-note-btn" title="Create New Note">+</button>
+  </div>
+  <ul class="note-list" @sync="notes-list">
+    {% for note in notes %}
+      <li>
+        <a href="/notes/{{ note.id }}" class="note-link" data-transition="fade">
+          {{ note.title }}
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
