@@ -9,7 +9,7 @@
 </head>
 
 <body data-jigsaw="{{ encodeURIComponent(JSON.stringify(profiles)) }}">
-	{{{navigation}}}
+	{{{ 'navigation' }}}
 	<div class="profiles-container">
 		<h1>Profiles</h1>
 		{% for profile in profiles %}

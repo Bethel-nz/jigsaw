@@ -9,10 +9,10 @@
 </head>
 
 <body>
-  {{{navigation}}}
+  {{{ 'navigation' }}}
   <div class="profile">
     <div class="profile-header">
-      {{{profileImage}}}
+      {{{ 'profileImage' }}}
       {{ headerName }}
       {% if bio %}
       <p>{{ bio }}</p>

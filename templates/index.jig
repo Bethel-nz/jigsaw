@@ -4,15 +4,36 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>{{ title }}</title>
 	<link rel="stylesheet" href="/static/styles/profile.css">
 </head>
 
+@meta {{
+  title: "Home - Jigsaw Demo",
+  description: "Welcome to the Jigsaw demo site."
+}}
+
+
 <body>
-	{{{navigation}}}
+	{{{ 'navigation' }}}
 	<div class="profile">
-		<h1>{{ title }}</h1>
-		<p>Welcome to our JigSaw Profiles showcase! Click on the "Profiles" link above to view all profiles.</p>
+		<h1>{{ title |> upper }}</h1>
+        
+        {# This is a comment showing off the new comment syntax #}
+        
+		<p>Welcome to our JigSaw Profiles showcase!</p>
+        
+        <div class="stats">
+            <p>Current Year: {{ 2020 + 5 }}</p>
+            <p>Is it 2025? {% if (2020 + 5) == 2025 %}Yes!{% else %}No{% endif %}</p>
+        </div>
+
+        {% if show_promo %}
+            <div class="promo">
+                <strong>Special Offer!</strong>
+            </div>
+        {% endif %}
+
+		<p>Click on the "Profiles" link above to view all profiles.</p>
 	</div>
 </body>
 
