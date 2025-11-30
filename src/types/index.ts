@@ -41,3 +41,10 @@ export interface CachedRoute {
   content: string;
   lastUpdated: number;
 }
+
+export interface RenderResult {
+  html: string;
+  meta: Record<string, any>;
+  scripts: { content: string }[];
+  toString(): string;
+}
