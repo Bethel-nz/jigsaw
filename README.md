@@ -1,6 +1,21 @@
-# JigSaw Templating Engine
+# Jigsaw Template Engine
 
-JigSaw is a lightweight templating engine for Node.js applications, written in TypeScript. It provides an easy way to create dynamic HTML content with support for partials, control structures, and component-like rendering.
+Jigsaw is a **modern, lightweight template engine for Node.js/Bun applications** written in TypeScript. It's designed for learning purposes and features an innovative Islands Architecture combined with View Transitions for building dynamic, SPA-like experiences with multi-page architecture.
+
+**Key Philosophy**: Provides the interactivity of SPAs (Single Page Applications) while maintaining the simplicity of multi-page applications through Islands Architecture and smart client-side routing.
+
+![sample site made with jigsaw](./image.png)
+
+## Core Features
+
+- **Islands Architecture**: Persistent UI components that survive navigation, ideal for navigation bars, audio players, and shopping carts.
+- **View Transitions API**: Native browser animations for smooth page transitions without extra JavaScript libraries.
+- **Modern Template Syntax**: Includes variable interpolation, control structures, components, and more.
+- **Reactivity**: Built-in support for reactive state management.
+- **Dynamic Routing**: Pattern-based routing for creating dynamic pages and APIs.
+- **Hot Module Replacement (HMR)**: Automatic reloading of templates and live updates for CSS.
+- **Performance-focused**: Features persistent and in-memory caching, streaming, and background cache warming.
+- **Static Site Generation (SSG)**: Build your dynamic application into a static site with a single command.
 
 ## Getting Started
 
@@ -41,58 +56,14 @@ bun i
    JigSaw.serve({ port: 8750 });
    ```
 
-## Template Syntax
+## Documentation
 
-- **Variable Interpolation:** `{{ variableName }}`
-- **Components:** `{{{ componentName }}}`
-- **Control Structures:**
-  - If/Else: `{% if condition %} ... {% else %} ... {% endif %}`
-  - For Loops: `{% for item in items %} ... {% endfor %}`
+For more detailed information, please refer to the documentation in the `docs` folder:
 
-### Example Template
-
-```html
-<div class="profile">
-  {{{ profileImage }}}
-  <h1>{{ name }}</h1>
-  {% if bio %}
-  <p>{{ bio }}</p>
-  {% endif %}
-</div>
-```
-
-## Components
-
-Components are reusable template snippets. Example:
-
-```html
-<!-- components/_profileImage.jig -->
-<img src="{{ src }}" alt="{{ alt }}" class="{{ class }}" />
-```
-
-## Advanced Features
-
-- **Component-like Rendering:** Support for rendering complex UI elements
-- **Special Types:** Built-in types for links and headers
-- **TypeScript Support:** Provides type safety and autocomplete
-- **Development Mode:** Includes hot reloading for templates and components
-- **Static File Serving:** Automatically serves static files from the `static` directory
-
-## File Structure
-
-- `templates/`: Main template files
-- `components/`: Reusable component files
-- `static/`: Static assets (CSS, JavaScript, images)
-
-## API Reference
-
-For detailed API information, refer to the source code in the `src` directory.
-
-## Examples
-
-Check the `templates` directory for sample projects demonstrating JigSaw's capabilities.
-
-![sample site made with jigsaw](./image.png)
+- **[TUTORIAL.md](./docs/TUTORIAL.md)**: A step-by-step guide to building your first Jigsaw application.
+- **[SYNTAX.md](./docs/SYNTAX.md)**: A comprehensive guide to the Jigsaw template syntax.
+- **[API.md](./docs/API.md)**: The complete API reference for the Jigsaw template engine.
+- **[SECURITY.md](./docs/SECURITY.md)**: Best practices for building secure applications with Jigsaw.
 
 ## Note
 
