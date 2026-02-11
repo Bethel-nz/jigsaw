@@ -239,5 +239,6 @@ jigsaw.route('/product/:id', (params) => {
 import { fileURLToPath } from 'url';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  jigsaw.serve({ port: 3090 });
+  const port = parseInt(process.env.PORT || '3090');
+  jigsaw.serve({ port });
 }

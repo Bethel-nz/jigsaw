@@ -421,8 +421,8 @@ class JigSaw {
       // console.log('Client connected to HMR');
     });
 
-    server.listen(this.config.port, () => {
-      console.log(`Server running at http://localhost:${this.config.port}/`);
+    server.listen(this.config.port, '0.0.0.0', () => {
+      console.log(`Server running at http://0.0.0.0:${this.config.port}/`);
       console.log(`HMR Active`);
     });
   }
