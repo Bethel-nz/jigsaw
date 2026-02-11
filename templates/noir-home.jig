@@ -1,0 +1,228 @@
+@meta {{
+title: "NØIR — Drop 001",
+description: "Minimal. Raw. Essential."
+}}
+
+<!-- Hero -->
+<section class="noir-hero">
+  <div>
+    <h1 class="noir-hero-title">
+      <span class="glitch-wrapper">
+        <span class="glitch-text" aria-hidden="true">NØIR</span>
+        <span class="glitch-text-main">NØIR</span>
+        <span class="glitch-text glitch-text-2" aria-hidden="true">NØIR</span>
+      </span>
+    </h1>
+  </div>
+  <p class="noir-hero-sub">Drop 001</p>
+  <a href="/collection" class="noir-hero-cta" data-transition="fade">Shop Now</a>
+  <div class="noir-hero-line"></div>
+</section>
+
+<!-- Marquee -->
+<div class="noir-marquee">
+  <div class="noir-marquee-track">
+    {% for i in marqueeItems %}
+    <span class="noir-marquee-item">NØIR · DROP 001 · ESSENTIAL ·</span>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Collection Preview -->
+<section class="noir-section">
+  <div>
+    <p class="noir-section-label">001 / COLLECTION</p>
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:2rem;">
+      <h2 class="noir-section-title">COLLECTION</h2>
+      <span class="noir-section-label" style="color:var(--muted-dim);">{{ productCount }} PIECES</span>
+    </div>
+  </div>
+
+  <div class="noir-grid">
+    {% for product in featured %}
+    <div class="noir-card" data-init-observe>
+      <div class="noir-card-rgb"></div>
+      <a href="/product/{{ product.id }}" data-transition="fade">
+        <div class="noir-card-img">
+          <img src="/static/noir/{{ product.id }}.jpg" alt="{{ product.name }}" loading="lazy">
+          <div class="noir-card-scanlines"></div>
+          <span class="noir-card-category">{{ product.category }}</span>
+          <span class="noir-card-size">{{ product.size }}</span>
+        </div>
+      </a>
+      <div class="noir-card-info">
+        <div class="noir-card-header">
+          <div>
+            <div class="noir-card-name">{{ product.name }}</div>
+            <div class="noir-card-price">${{ product.price }}</div>
+          </div>
+          <div class="noir-card-id">{{ product.id | upper }}</div>
+        </div>
+        <button class="noir-add-btn" @click="
+          addToCart('{{ product.id }}', '{{ product.name }}', '{{ product.category }}', {{ product.price }});
+          $el.textContent = 'ADDED';
+          $el.classList.add('added');
+          setTimeout(function() { $el.textContent = 'ADD TO BAG'; $el.classList.remove('added'); }, 1200);
+        ">ADD TO BAG</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex; justify-content:center; margin-top:3rem;">
+    <a href="/collection" class="noir-view-all" data-transition="fade">
+      <span>View all {{ productCount }} pieces</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12" />
+        <polyline points="12 5 19 12 12 19" />
+      </svg>
+    </a>
+  </div>
+</section>
+
+<!-- Marquee 2 -->
+<div class="noir-marquee">
+  <div class="noir-marquee-track">
+    {% for i in marqueeItems %}
+    <span class="noir-marquee-item">NØIR · DROP 001 · ESSENTIAL ·</span>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Lookbook -->
+<section class="noir-section">
+  <div>
+    <p class="noir-section-label">002</p>
+    <h2 class="noir-section-title">LOOKBOOK</h2>
+  </div>
+
+  <div class="noir-lookbook-grid" style="margin-top:4rem;">
+    <!-- Full width -->
+    <div class="noir-lookbook-row full">
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-16-9">
+          <img src="/static/noir/lookbook-1.jpg" alt="Drop 001 Spring">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">DROP 001 / SPRING</span>
+          <span class="noir-lookbook-tag">ESSENTIALS</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Split -->
+    <div class="noir-lookbook-row split">
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-2-3">
+          <img src="/static/noir/lookbook-2.jpg" alt="Signal Tee">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">SIGNAL TEE</span>
+          <span class="noir-lookbook-tag">CORE</span>
+        </div>
+      </div>
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-2-3">
+          <img src="/static/noir/lookbook-3.jpg" alt="Static Hoodie">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">STATIC HOODIE</span>
+          <span class="noir-lookbook-tag">LAYER</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full width cinematic -->
+    <div class="noir-lookbook-row full">
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-21-9">
+          <img src="/static/noir/lookbook-4.jpg" alt="Collection SS26">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">COLLECTION / SS26</span>
+          <span class="noir-lookbook-tag">LOOKBOOK</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trio -->
+    <div class="noir-lookbook-row trio">
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-3-4">
+          <img src="/static/noir/lookbook-5.jpg" alt="Noise Pant">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">NOISE PANT</span>
+          <span class="noir-lookbook-tag">BOTTOM</span>
+        </div>
+      </div>
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-3-4">
+          <img src="/static/noir/lookbook-6.jpg" alt="Corrupt Jacket">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">CORRUPT JACKET</span>
+          <span class="noir-lookbook-tag">OUTER</span>
+        </div>
+      </div>
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-3-4">
+          <img src="/static/noir/lookbook-7.jpg" alt="Decay Vest">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">DECAY VEST</span>
+          <span class="noir-lookbook-tag">LAYER</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Final full -->
+    <div class="noir-lookbook-row full">
+      <div class="noir-lookbook-item" data-init-observe>
+        <div class="noir-lookbook-img ratio-2-1">
+          <img src="/static/noir/lookbook-8.jpg" alt="Editorial">
+          <div class="noir-lookbook-grain"></div>
+          <div class="noir-lookbook-rgb-line"></div>
+        </div>
+        <div class="noir-lookbook-caption">
+          <span class="noir-lookbook-label">EDITORIAL</span>
+          <span class="noir-lookbook-tag">NØIR</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="noir-rule"></div>
+</section>
+
+<script>
+  // IntersectionObserver for scroll-reveal
+  document.addEventListener('DOMContentLoaded', function () {
+    var items = document.querySelectorAll('[data-init-observe]');
+    if (!items.length) return;
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.05 });
+    items.forEach(function (el) { obs.observe(el); });
+  });
+</script>

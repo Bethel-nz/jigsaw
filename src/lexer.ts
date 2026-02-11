@@ -21,6 +21,8 @@ export enum TokenType {
   FN_DEFINITION, // @fn name(args) { ... }
   LBRACE, // {
   RBRACE, // }
+  LBRACKET, // [
+  RBRACKET, // ]
   COLON, // :
   EOF,
 }
@@ -63,7 +65,10 @@ export class Lexer {
     // Handle Comments {# ... #} FIRST
     if (this.input.startsWith('{#', this.position)) {
       this.position += 2;
-      while (this.position < this.input.length && !this.input.startsWith('#}', this.position)) {
+      while (
+        this.position < this.input.length &&
+        !this.input.startsWith('#}', this.position)
+      ) {
         this.advance();
       }
       this.advance(2);
@@ -72,9 +77,9 @@ export class Lexer {
 
     if (this.inCodeMode) {
       this.skipWhitespace();
-      
+
       if (this.position >= this.input.length) {
-         return this.createToken(TokenType.EOF, '');
+        return this.createToken(TokenType.EOF, '');
       }
 
       if (this.input.startsWith('}}}', this.position)) {
@@ -91,7 +96,10 @@ export class Lexer {
       }
 
       // Handle Strings
-      if (this.input[this.position] === '"' || this.input[this.position] === "'") {
+      if (
+        this.input[this.position] === '"' ||
+        this.input[this.position] === "'"
+      ) {
         return this.readString();
       }
 
@@ -104,7 +112,7 @@ export class Lexer {
       if (this.isAlpha(this.input[this.position])) {
         return this.readIdentifier();
       }
-      
+
       // Handle Dot
       if (this.input[this.position] === '.') {
         const startColumn = this.column;
@@ -121,9 +129,14 @@ export class Lexer {
 
       // Handle OR Operator ||
       if (this.input.startsWith('||', this.position)) {
-          const startColumn = this.column;
-          this.advance(2);
-          return this.createToken(TokenType.OPERATOR, '||', this.line, startColumn);
+        const startColumn = this.column;
+        this.advance(2);
+        return this.createToken(
+          TokenType.OPERATOR,
+          '||',
+          this.line,
+          startColumn,
+        );
       }
 
       // Handle Single Pipe |
@@ -143,6 +156,28 @@ export class Lexer {
         const startColumn = this.column;
         this.advance();
         return this.createToken(TokenType.RPAREN, ')', this.line, startColumn);
+      }
+
+      // Handle Brackets
+      if (this.input[this.position] === '[') {
+        const startColumn = this.column;
+        this.advance();
+        return this.createToken(
+          TokenType.LBRACKET,
+          '[',
+          this.line,
+          startColumn,
+        );
+      }
+      if (this.input[this.position] === ']') {
+        const startColumn = this.column;
+        this.advance();
+        return this.createToken(
+          TokenType.RBRACKET,
+          ']',
+          this.line,
+          startColumn,
+        );
       }
 
       // Handle Braces
@@ -173,38 +208,68 @@ export class Lexer {
 
       // Handle Operators
       if (this.input.startsWith('==', this.position)) {
-          const startColumn = this.column;
-          this.advance(2);
-          return this.createToken(TokenType.OPERATOR, '==', this.line, startColumn);
+        const startColumn = this.column;
+        this.advance(2);
+        return this.createToken(
+          TokenType.OPERATOR,
+          '==',
+          this.line,
+          startColumn,
+        );
       }
       if (this.input.startsWith('!=', this.position)) {
-          const startColumn = this.column;
-          this.advance(2);
-          return this.createToken(TokenType.OPERATOR, '!=', this.line, startColumn);
+        const startColumn = this.column;
+        this.advance(2);
+        return this.createToken(
+          TokenType.OPERATOR,
+          '!=',
+          this.line,
+          startColumn,
+        );
       }
       if (this.input.startsWith('&&', this.position)) {
-          const startColumn = this.column;
-          this.advance(2);
-          return this.createToken(TokenType.OPERATOR, '&&', this.line, startColumn);
+        const startColumn = this.column;
+        this.advance(2);
+        return this.createToken(
+          TokenType.OPERATOR,
+          '&&',
+          this.line,
+          startColumn,
+        );
       }
       if (this.input.startsWith('>=', this.position)) {
-          const startColumn = this.column;
-          this.advance(2);
-          return this.createToken(TokenType.OPERATOR, '>=', this.line, startColumn);
+        const startColumn = this.column;
+        this.advance(2);
+        return this.createToken(
+          TokenType.OPERATOR,
+          '>=',
+          this.line,
+          startColumn,
+        );
       }
       if (this.input.startsWith('<=', this.position)) {
-          const startColumn = this.column;
-          this.advance(2);
-          return this.createToken(TokenType.OPERATOR, '<=', this.line, startColumn);
+        const startColumn = this.column;
+        this.advance(2);
+        return this.createToken(
+          TokenType.OPERATOR,
+          '<=',
+          this.line,
+          startColumn,
+        );
       }
 
       if ('+-*/><!='.includes(this.input[this.position])) {
-          const char = this.input[this.position];
-          const startColumn = this.column;
-          this.advance();
-          return this.createToken(TokenType.OPERATOR, char, this.line, startColumn);
+        const char = this.input[this.position];
+        const startColumn = this.column;
+        this.advance();
+        return this.createToken(
+          TokenType.OPERATOR,
+          char,
+          this.line,
+          startColumn,
+        );
       }
-      
+
       const char = this.input[this.position];
       const startColumn = this.column;
       this.advance();
@@ -230,7 +295,7 @@ export class Lexer {
       const nextMeta = this.input.indexOf('@meta', this.position);
       const nextScript = this.input.indexOf('@script', this.position);
       const nextFn = this.input.indexOf('@fn', this.position);
-      
+
       let nextIndex = this.input.length;
       let tagType: TokenType | null = null;
       let tagStr = '';
@@ -240,15 +305,15 @@ export class Lexer {
         tagType = TokenType.OPEN_COMPONENT;
         tagStr = '{{{';
       }
-      
+
       if (nextOpenTag !== -1 && nextOpenTag < nextIndex) {
-         if (nextOpenComponent !== nextOpenTag) {
-             nextIndex = nextOpenTag;
-             tagType = TokenType.OPEN_TAG;
-             tagStr = '{{';
-         }
+        if (nextOpenComponent !== nextOpenTag) {
+          nextIndex = nextOpenTag;
+          tagType = TokenType.OPEN_TAG;
+          tagStr = '{{';
+        }
       }
-      
+
       if (nextOpenBlock !== -1 && nextOpenBlock < nextIndex) {
         nextIndex = nextOpenBlock;
         tagType = TokenType.OPEN_BLOCK;
@@ -272,11 +337,14 @@ export class Lexer {
         this.inCodeMode = true;
         return this.consumeTag(tagType, tagStr);
       }
-      
+
       // Should be handled by @meta/@script/@fn checks above, but just in case
-      if (this.input.startsWith('@meta', this.position)) return this.readMetaDirective();
-      if (this.input.startsWith('@script', this.position)) return this.readScriptDirective();
-      if (this.input.startsWith('@fn', this.position)) return this.readFnDirective();
+      if (this.input.startsWith('@meta', this.position))
+        return this.readMetaDirective();
+      if (this.input.startsWith('@script', this.position))
+        return this.readScriptDirective();
+      if (this.input.startsWith('@fn', this.position))
+        return this.readFnDirective();
 
       return this.readText(this.input.length);
     }
@@ -294,7 +362,7 @@ export class Lexer {
     // @script(...)
     const start = this.position;
     this.advance(7); // Skip @script
-    
+
     if (this.input[this.position] === '(') {
       this.advance(); // Skip (
       const contentStart = this.position;
@@ -318,8 +386,12 @@ export class Lexer {
 
     // 1. Parse Name
     const nameStart = this.position;
-    while (this.position < this.input.length && (this.isAlphaNumeric(this.input[this.position]) || this.input[this.position] === '_')) {
-        this.advance();
+    while (
+      this.position < this.input.length &&
+      (this.isAlphaNumeric(this.input[this.position]) ||
+        this.input[this.position] === '_')
+    ) {
+      this.advance();
     }
     const name = this.input.slice(nameStart, this.position);
     this.skipWhitespace();
@@ -327,33 +399,41 @@ export class Lexer {
     // 2. Parse Args
     let args = '';
     if (this.input[this.position] === '(') {
-        this.advance(); // Skip (
-        const argsStart = this.position;
-        while (this.position < this.input.length && this.input[this.position] !== ')') {
-            this.advance();
-        }
-        args = this.input.slice(argsStart, this.position);
-        this.advance(); // Skip )
+      this.advance(); // Skip (
+      const argsStart = this.position;
+      while (
+        this.position < this.input.length &&
+        this.input[this.position] !== ')'
+      ) {
+        this.advance();
+      }
+      args = this.input.slice(argsStart, this.position);
+      this.advance(); // Skip )
     }
     this.skipWhitespace();
 
     // 3. Parse Body
     if (this.input[this.position] === '{') {
-        const bodyStart = this.position + 1; // Skip {
-        this.advance(); 
-        
-        let braceCount = 1;
-        while (this.position < this.input.length && braceCount > 0) {
-            if (this.input[this.position] === '{') braceCount++;
-            if (this.input[this.position] === '}') braceCount--;
-            this.advance();
-        }
-        
-        // The last advance skipped the closing }, so bodyEnd should be position - 1
-        const body = this.input.slice(bodyStart, this.position - 1);
-        
-        const value = JSON.stringify({ name, args, body });
-        return this.createToken(TokenType.FN_DEFINITION, value, this.line, startColumn);
+      const bodyStart = this.position + 1; // Skip {
+      this.advance();
+
+      let braceCount = 1;
+      while (this.position < this.input.length && braceCount > 0) {
+        if (this.input[this.position] === '{') braceCount++;
+        if (this.input[this.position] === '}') braceCount--;
+        this.advance();
+      }
+
+      // The last advance skipped the closing }, so bodyEnd should be position - 1
+      const body = this.input.slice(bodyStart, this.position - 1);
+
+      const value = JSON.stringify({ name, args, body });
+      return this.createToken(
+        TokenType.FN_DEFINITION,
+        value,
+        this.line,
+        startColumn,
+      );
     }
 
     // Fallback if syntax is wrong
@@ -370,7 +450,7 @@ export class Lexer {
     const start = this.position;
     const startColumn = this.column;
     let end = limit || this.input.length;
-    
+
     const value = this.input.slice(start, end);
     this.advance(value.length);
     return this.createToken(TokenType.TEXT, value, this.line, startColumn);
@@ -381,14 +461,17 @@ export class Lexer {
     const quote = this.input[this.position];
     this.advance(); // Skip quote
     const start = this.position;
-    
-    while (this.position < this.input.length && this.input[this.position] !== quote) {
+
+    while (
+      this.position < this.input.length &&
+      this.input[this.position] !== quote
+    ) {
       if (this.input[this.position] === '\\') {
         this.advance(); // Skip escape char
       }
       this.advance();
     }
-    
+
     const value = this.input.slice(start, this.position);
     this.advance(); // Skip closing quote
     return this.createToken(TokenType.STRING, value, this.line, startColumn);
@@ -398,19 +481,31 @@ export class Lexer {
     const start = this.position;
     const startColumn = this.column;
     while (
-      this.position < this.input.length && 
-      (this.isAlphaNumeric(this.input[this.position]) || this.input[this.position] === '_')
+      this.position < this.input.length &&
+      (this.isAlphaNumeric(this.input[this.position]) ||
+        this.input[this.position] === '_')
     ) {
       this.advance();
     }
-    
+
     const value = this.input.slice(start, this.position);
     const type = this.getKeywordType(value) || TokenType.IDENTIFIER;
     return this.createToken(type, value, this.line, startColumn);
   }
 
   private getKeywordType(text: string): TokenType | null {
-    const keywords = ['if', 'else', 'for', 'endif', 'endfor', 'in', 'island', 'endisland', 'transition', 'endtransition'];
+    const keywords = [
+      'if',
+      'else',
+      'for',
+      'endif',
+      'endfor',
+      'in',
+      'island',
+      'endisland',
+      'transition',
+      'endtransition',
+    ];
     // console.log(`Checking keyword: "${text}"`);
     if (keywords.includes(text)) {
       return TokenType.KEYWORD;
@@ -421,16 +516,25 @@ export class Lexer {
   private readNumber(): Token {
     const start = this.position;
     const startColumn = this.column;
-    while (this.position < this.input.length && this.isDigit(this.input[this.position])) {
+    while (
+      this.position < this.input.length &&
+      this.isDigit(this.input[this.position])
+    ) {
       this.advance();
     }
-    if (this.position < this.input.length && this.input[this.position] === '.') {
+    if (
+      this.position < this.input.length &&
+      this.input[this.position] === '.'
+    ) {
+      this.advance();
+      while (
+        this.position < this.input.length &&
+        this.isDigit(this.input[this.position])
+      ) {
         this.advance();
-        while (this.position < this.input.length && this.isDigit(this.input[this.position])) {
-            this.advance();
-        }
+      }
     }
-    
+
     const value = this.input.slice(start, this.position);
     return this.createToken(TokenType.NUMBER, value, this.line, startColumn);
   }
@@ -440,7 +544,10 @@ export class Lexer {
   }
 
   private skipWhitespace() {
-    while (this.position < this.input.length && /\s/.test(this.input[this.position])) {
+    while (
+      this.position < this.input.length &&
+      /\s/.test(this.input[this.position])
+    ) {
       this.advance();
     }
   }
@@ -467,7 +574,12 @@ export class Lexer {
     }
   }
 
-  private createToken(type: TokenType, value: string, line?: number, column?: number): Token {
+  private createToken(
+    type: TokenType,
+    value: string,
+    line?: number,
+    column?: number,
+  ): Token {
     return {
       type,
       value,

@@ -14,20 +14,24 @@ class JigSaw {
   private static components: Map<string, string> = new Map();
   private static pipes: Map<string, Function> = new Map([
     ['safe', (str: string) => str],
+    ['json', (data: any) => JSON.stringify(data)],
+    ['upper', (str: string) => (str ? str.toUpperCase() : '')],
   ]);
   private static routes: Map<
     string,
-    (params?: Record<string, string>) => string | RenderResult | Promise<string | RenderResult>
+    (
+      params?: Record<string, string>,
+    ) => string | RenderResult | Promise<string | RenderResult>
   > = new Map();
   private static routeCache: Map<string, CachedRoute> = new Map();
   private static parentRoutes: Set<string> = new Set();
-  
+
   private static watcher: chokidar.FSWatcher | null = null;
-  private static wss: WebSocketServer | null = null; 
+  private static wss: WebSocketServer | null = null;
 
   private static templatesDir: string = path.join(process.cwd(), 'templates');
   private static componentsDir: string = path.join(process.cwd(), 'components');
-  private static publicDir: string = path.join(process.cwd(), 'public'); 
+  private static publicDir: string = path.join(process.cwd(), 'public');
 
   private static config: JigSawConfig = {
     port: 3000,
@@ -40,7 +44,7 @@ class JigSaw {
   static definePipe(name: string, fn: Function): void {
     this.pipes.set(name, fn);
   }
-  
+
   static getPipes(): Record<string, Function> {
     return Object.fromEntries(this.pipes);
   }
@@ -56,7 +60,9 @@ class JigSaw {
   private static loadSingleTemplate(name: string): void {
     const templatePath = path.join(this.templatesDir, `${name}.jig`);
     if (!fs.existsSync(templatePath)) {
-      console.warn(`Template file not found: ${templatePath}. Using empty template.`);
+      console.warn(
+        `Template file not found: ${templatePath}. Using empty template.`,
+      );
       this.templates.set(name, new Knob('', name));
     } else {
       const fileContent = fs.readFileSync(templatePath, 'utf-8');
@@ -64,26 +70,33 @@ class JigSaw {
     }
   }
 
-  static render(name: string, data: TemplateData, initialMeta: any = {}): RenderResult {
+  static render(
+    name: string,
+    data: TemplateData,
+    initialMeta: any = {},
+  ): RenderResult {
     const template = this.templates.get(name);
     if (!template) {
       throw new Error(`Template "${name}" not found`);
     }
-    
+
     const context = { meta: { ...initialMeta }, scripts: [] };
     const html = template.render(data, context);
-    
+
     return {
-       html,
-       meta: context.meta,
-       scripts: context.scripts,
-       toString: () => html
+      html,
+      meta: context.meta,
+      scripts: context.scripts,
+      handlers: template.getHandlers ? template.getHandlers() : new Map(),
+      toString: () => html,
     };
   }
 
   static route(
     routePath: string,
-    handler: (params?: Record<string, string>) => string | RenderResult | Promise<string | RenderResult>
+    handler: (
+      params?: Record<string, string>,
+    ) => string | RenderResult | Promise<string | RenderResult>,
   ): void {
     const templatePath = routePath.replace(/:/g, '$');
     const paramNames = this.getRouteParams(routePath);
@@ -107,45 +120,63 @@ class JigSaw {
       }
 
       const content = await handler(params);
-      
-      // We return content as is (string or RenderResult).
-      // Caching is handled in handleRoute if needed, but currently we cache the string result in routeCache.
-      // Wait, routeCache stores string.
-      // If content is RenderResult, we can't store it directly if we want to cache the FINAL html.
-      // But final HTML generation happens in handleRoute.
-      // So routeCache here is actually not fully utilized if we return RenderResult.
-      // But that's fine for now.
-      
+
       return content;
     });
   }
 
   private static getRouteParams(routePath: string): string[] {
-    return routePath.split('/').filter((part) => part.startsWith(':')).map((part) => part.slice(1));
+    return routePath
+      .split('/')
+      .filter((part) => part.startsWith(':'))
+      .map((part) => part.slice(1));
   }
 
-  private static async handleRoute(path: string): Promise<string> {
+  private static async handleRoute(
+    path: string,
+    query?: URLSearchParams,
+  ): Promise<string> {
     const [routePath, params] = this.matchRoute(path);
     const routeHandler = this.routes.get(routePath);
-    
+
     if (routeHandler) {
       try {
+        // Merge query params into route params
+        if (query && params) {
+          try {
+            query.forEach((value, key) => {
+              params[key] = value;
+            });
+          } catch (e) {
+            console.error('[Jigsaw] Error merging query params:', e);
+          }
+        } else if (query && !params) {
+          console.warn(
+            '[Jigsaw] Query params present but no params object for route:',
+            routePath,
+          );
+        }
+
         let content = await routeHandler(params);
         let meta = {};
         let scripts: { content: string }[] = [];
 
+        let handlers: Map<string, string> = new Map();
+
         if (typeof content === 'object' && content.html) {
-             meta = content.meta;
-             scripts = content.scripts;
-             content = content.html;
+          meta = content.meta;
+          scripts = content.scripts;
+          if (content.handlers) handlers = content.handlers;
+          content = content.html;
         } else if (typeof content === 'string') {
-             // It's just a string
+          // It's just a string
         }
 
         let data = {};
         try {
           const root = parse(content as string);
-          const dataAttr = root.rawAttrs && root.rawAttrs.match(/data-jigsaw="([^"]+)"/);
+          const dataAttr =
+            root.rawAttrs && root.rawAttrs.match(/data-jigsaw="([^"]+)"/);
           if (dataAttr && dataAttr[1]) {
             data = JSON.parse(decodeURIComponent(dataAttr[1]));
           }
@@ -161,36 +192,41 @@ class JigSaw {
         // Inject Morphdom for HMR/View Transitions
         finalContent = this.injectMorphdom(finalContent);
 
+        // Inject Handlers Script (CSP Safe)
+        if (handlers && handlers.size > 0) {
+          let handlerScriptContent =
+            'window.__JIGSAW_HANDLERS = window.__JIGSAW_HANDLERS || {};\n';
+          for (const [id, code] of handlers) {
+            handlerScriptContent += `window.__JIGSAW_HANDLERS['${id}'] = function($event, $el, $state, $ref, $, $http, $effect) { 
+                  try {
+                    ${code}
+                  } catch(e) { console.error("Error in handler ${id}:", e); }
+                };\n`;
+            handlerScriptContent += `window.__JIGSAW_HANDLERS['${id}'].__code = ${JSON.stringify(code)};\n`;
+          }
+          finalContent = this.injectScript(finalContent, handlerScriptContent);
+        }
 
-
-
-
-        // Inject HMR Script (Legacy - Disabled in favor of Smart HMR in router)
-        // if (process.env.NODE_ENV !== 'production') {
-        //    finalContent = this.injectHMRScript(finalContent);
-        // }
-        
         return finalContent;
-
       } catch (error) {
         console.error(`Error handling route ${path}:`, error);
-        
+
         const errorContext: ErrorContext = {
           error: error as Error,
           templateName: routePath,
           templatePath: path,
         };
-        
+
         if (error instanceof TemplateError) {
-            errorContext.errorLine = error.line;
-            errorContext.errorColumn = error.column;
+          errorContext.errorLine = error.line;
+          errorContext.errorColumn = error.column;
         } else {
-            const lineMatch = (error as Error).message.match(/at line (\d+)/);
-            if (lineMatch) {
-              errorContext.errorLine = parseInt(lineMatch[1]);
-            }
+          const lineMatch = (error as Error).message.match(/at line (\d+)/);
+          if (lineMatch) {
+            errorContext.errorLine = parseInt(lineMatch[1]);
+          }
         }
-        
+
         let errorPage = formatErrorPage(errorContext);
         // if (process.env.NODE_ENV !== 'production') {
         //    errorPage = this.injectHMRScript(errorPage);
@@ -204,64 +240,72 @@ class JigSaw {
   private static injectHead(html: string, meta: any, scripts: any[]): string {
     let injected = html;
     let headContent = '';
-    
+
     if (meta && Object.keys(meta).length > 0) {
-       const metaTags = Object.entries(meta).map(([key, value]) => {
+      const metaTags = Object.entries(meta)
+        .map(([key, value]) => {
           // Handle link tags: link: { rel: 'stylesheet', href: '...' }
           if (key === 'link') {
-             if (Array.isArray(value)) {
-                return value.map(link => {
-                   const attrs = Object.entries(link).map(([k, v]) => `${k}="${v}"`).join(' ');
-                   return `<link ${attrs}>`;
-                }).join('\n');
-             } else if (typeof value === 'object' && value !== null) {
-                const attrs = Object.entries(value).map(([k, v]) => `${k}="${v}"`).join(' ');
-                return `<link ${attrs}>`;
-             }
-             return '';
+            if (Array.isArray(value)) {
+              return value
+                .map((link) => {
+                  const attrs = Object.entries(link)
+                    .map(([k, v]) => `${k}="${v}"`)
+                    .join(' ');
+                  return `<link ${attrs}>`;
+                })
+                .join('\n');
+            } else if (typeof value === 'object' && value !== null) {
+              const attrs = Object.entries(value)
+                .map(([k, v]) => `${k}="${v}"`)
+                .join(' ');
+              return `<link ${attrs}>`;
+            }
+            return '';
           }
 
           // Handle title specifically
           if (key === 'title') {
-             return `<title>${value}</title>`;
+            return `<title>${value}</title>`;
           }
-          
+
           return `<meta name="${key}" content="${value}">`;
-       }).join('\n');
-       headContent += metaTags + '\n';
+        })
+        .join('\n');
+      headContent += metaTags + '\n';
     }
 
     if (scripts && scripts.length > 0) {
-       const scriptTags = scripts.map(s => {
+      const scriptTags = scripts
+        .map((s) => {
           return `<script ${s.content}></script>`;
-       }).join('\n');
-       // Scripts usually go in body, but if we want them in head? 
-       // The user didn't specify, but usually scripts are at end of body.
-       // Let's keep scripts separate for body injection unless they are specifically head scripts.
-       // For now, we'll stick to existing logic for scripts (end of body) 
-       // BUT we need to handle the head marker.
-       
-       if (injected.includes('</body>')) {
-         injected = injected.replace('</body>', `${scriptTags}\n</body>`);
-       } else {
-         injected += scriptTags;
-       }
+        })
+        .join('\n');
+
+      if (injected.includes('</body>')) {
+        injected = injected.replace('</body>', `${scriptTags}\n</body>`);
+      } else {
+        injected += scriptTags;
+      }
     }
 
     // Replace the FIRST marker with <head>
     if (injected.includes('<!-- JIGSAW_META_HEAD -->')) {
-        injected = injected.replace('<!-- JIGSAW_META_HEAD -->', `<head>\n${headContent}</head>`);
-        // Remove any subsequent markers
-        injected = injected.replace(/<!-- JIGSAW_META_HEAD -->/g, '');
+      injected = injected.replace(
+        '<!-- JIGSAW_META_HEAD -->',
+        `<head>\n${headContent}</head>`,
+      );
+      // Remove any subsequent markers
+      injected = injected.replace(/<!-- JIGSAW_META_HEAD -->/g, '');
     } else {
-        // Fallback: inject into existing head or title
-        if (injected.includes('</head>')) {
-            injected = injected.replace('</head>', `${headContent}\n</head>`);
-        } else if (injected.includes('<title>')) {
-            injected = injected.replace('<title>', `${headContent}\n<title>`);
-        }
+      // Fallback: inject into existing head or title
+      if (injected.includes('</head>')) {
+        injected = injected.replace('</head>', `${headContent}\n</head>`);
+      } else if (injected.includes('<title>')) {
+        injected = injected.replace('<title>', `${headContent}\n<title>`);
+      }
     }
-    
+
     return injected;
   }
 
@@ -277,7 +321,8 @@ class JigSaw {
           if (routeParts[i].startsWith(':')) {
             params[routeParts[i].slice(1)] = pathParts[i];
           } else if (routeParts[i] !== pathParts[i]) {
-            match = false; break;
+            match = false;
+            break;
           }
         }
         if (match) return [routePath, params];
@@ -288,12 +333,20 @@ class JigSaw {
 
   private static apiRoutes: Map<
     string,
-    (req: http.IncomingMessage, res: http.ServerResponse, params: Record<string, string>) => void
+    (
+      req: http.IncomingMessage,
+      res: http.ServerResponse,
+      params: Record<string, string>,
+    ) => void
   > = new Map();
 
   static api(
     routePath: string,
-    handler: (req: http.IncomingMessage, res: http.ServerResponse, params: Record<string, string>) => void
+    handler: (
+      req: http.IncomingMessage,
+      res: http.ServerResponse,
+      params: Record<string, string>,
+    ) => void,
   ): void {
     this.apiRoutes.set(routePath, handler);
   }
@@ -310,52 +363,62 @@ class JigSaw {
 
       // Check API Routes
       for (const [routePath, handler] of this.apiRoutes) {
-        const [matchedPath, params] = this.matchRoutePattern(routePath, pathname);
+        const [matchedPath, params] = this.matchRoutePattern(
+          routePath,
+          pathname,
+        );
         if (matchedPath) {
-            handler(req, res, params);
-            return;
+          handler(req, res, params);
+          return;
         }
       }
 
       const staticFilePath = path.join(process.cwd(), 'public', pathname);
-      if (fs.existsSync(staticFilePath) && fs.statSync(staticFilePath).isFile()) {
+      if (
+        fs.existsSync(staticFilePath) &&
+        fs.statSync(staticFilePath).isFile()
+      ) {
         const ext = path.extname(staticFilePath);
         const contentType = this.getContentType(ext);
-        const cacheControl = process.env.NODE_ENV === 'production' 
+        const cacheControl =
+          process.env.NODE_ENV === 'production'
             ? 'public, max-age=31536000' // 1 year for prod
             : 'no-cache'; // Disable cache for dev
-            
-        res.writeHead(200, { 
-            'Content-Type': contentType,
-            'Cache-Control': cacheControl
+
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Cache-Control': cacheControl,
         });
         fs.createReadStream(staticFilePath).pipe(res);
         return;
       }
 
-      const content = await this.handleRoute(pathname);
-      const statusCode = content.startsWith('4') || content.startsWith('5') && !content.includes('<html')
-          ? parseInt(content.slice(0, 3)) : 200;
+      const content = await this.handleRoute(pathname, url.searchParams);
+      const statusCode =
+        content.startsWith('4') ||
+        (content.startsWith('5') && !content.includes('<html'))
+          ? parseInt(content.slice(0, 3))
+          : 200;
 
-      res.writeHead(statusCode, { 
+      res.writeHead(statusCode, {
         'Content-Type': 'text/html',
-        'Transfer-Encoding': 'chunked' // Enable streaming
+        'Transfer-Encoding': 'chunked', // Enable streaming
       });
-      
+
       // Stream the response in chunks for better TTFB
       const chunkSize = 16384; // 16KB chunks
       for (let i = 0; i < content.length; i += chunkSize) {
         const chunk = content.slice(i, i + chunkSize);
         res.write(chunk);
       }
-      
+
       res.end();
     });
 
     this.wss = new WebSocketServer({ server });
-    
+
     this.wss.on('connection', (ws) => {
-        // console.log('Client connected to HMR');
+      // console.log('Client connected to HMR');
     });
 
     server.listen(this.config.port, () => {
@@ -366,7 +429,10 @@ class JigSaw {
 
   static async build(
     outputDir: string = 'dist',
-    options: { ignore?: string[]; staticPaths?: Record<string, Record<string, string>[]> } = {}
+    options: {
+      ignore?: string[];
+      staticPaths?: Record<string, Record<string, string>[]>;
+    } = {},
   ): Promise<void> {
     const distPath = path.resolve(process.cwd(), outputDir);
     console.log(`Building to ${distPath}...`);
@@ -383,39 +449,49 @@ class JigSaw {
 
     // 2. Copy Public Dir
     if (fs.existsSync(this.publicDir)) {
-        console.log('Copying static assets...');
-        this.copyDir(this.publicDir, path.join(distPath, 'static'));
+      console.log('Copying static assets...');
+      this.copyDir(this.publicDir, path.join(distPath, 'static'));
     }
 
     // 3. Render Routes
     console.log('Rendering routes...');
     for (const [routePath, handler] of this.routes) {
-        // Check Ignore List
-        if (options.ignore && options.ignore.includes(routePath)) {
-            console.log(`Skipping ignored route: ${routePath}`);
-            continue;
-        }
+      // Check Ignore List
+      if (options.ignore && options.ignore.includes(routePath)) {
+        console.log(`Skipping ignored route: ${routePath}`);
+        continue;
+      }
 
-        // Handle Dynamic Routes
-        if (routePath.includes(':')) {
-            if (options.staticPaths && options.staticPaths[routePath]) {
-                console.log(`Rendering dynamic route: ${routePath} with ${options.staticPaths[routePath].length} paths`);
-                for (const params of options.staticPaths[routePath]) {
-                    // Construct actual path for file saving
-                    let actualPath = routePath;
-                    for (const [key, value] of Object.entries(params)) {
-                        actualPath = actualPath.replace(`:${key}`, value);
-                    }
-                    await this.renderAndSaveRoute(routePath, handler, distPath, actualPath, params);
-                }
-            } else {
-                console.warn(`Skipping dynamic route: ${routePath} (No static paths provided)`);
+      // Handle Dynamic Routes
+      if (routePath.includes(':')) {
+        if (options.staticPaths && options.staticPaths[routePath]) {
+          console.log(
+            `Rendering dynamic route: ${routePath} with ${options.staticPaths[routePath].length} paths`,
+          );
+          for (const params of options.staticPaths[routePath]) {
+            // Construct actual path for file saving
+            let actualPath = routePath;
+            for (const [key, value] of Object.entries(params)) {
+              actualPath = actualPath.replace(`:${key}`, value);
             }
-            continue;
+            await this.renderAndSaveRoute(
+              routePath,
+              handler,
+              distPath,
+              actualPath,
+              params,
+            );
+          }
+        } else {
+          console.warn(
+            `Skipping dynamic route: ${routePath} (No static paths provided)`,
+          );
         }
+        continue;
+      }
 
-        // Handle Static Routes
-        await this.renderAndSaveRoute(routePath, handler, distPath, routePath);
+      // Handle Static Routes
+      await this.renderAndSaveRoute(routePath, handler, distPath, routePath);
     }
     console.log('Build complete!');
   }
@@ -425,49 +501,50 @@ class JigSaw {
     handler: Function,
     distPath: string,
     savePath: string,
-    params: Record<string, string> = {}
+    params: Record<string, string> = {},
   ): Promise<void> {
+    try {
+      console.log(`Rendering ${savePath}...`);
+      let content = await handler(params);
+      let meta = {};
+      let scripts: { content: string }[] = [];
+
+      if (typeof content === 'object' && content.html) {
+        meta = content.meta;
+        scripts = content.scripts;
+        content = content.html;
+      }
+
+      let data = {};
       try {
-            console.log(`Rendering ${savePath}...`);
-            let content = await handler(params);
-            let meta = {};
-            let scripts: { content: string }[] = [];
-
-            if (typeof content === 'object' && content.html) {
-                meta = content.meta;
-                scripts = content.scripts;
-                content = content.html;
-            }
-
-            let data = {};
-             try {
-                const root = parse(content as string);
-                const dataAttr = root.rawAttrs && root.rawAttrs.match(/data-jigsaw="([^"]+)"/);
-                if (dataAttr && dataAttr[1]) {
-                    data = JSON.parse(decodeURIComponent(dataAttr[1]));
-                }
-            } catch (e) {
-                console.warn('Failed to parse data-jigsaw attribute:', e);
-            }
-
-            let finalContent = this.cleanupEmptyElements(content as string, data);
-            finalContent = this.injectHead(finalContent, meta, scripts);
-            
-
-
-            const fileName = savePath === '/' ? 'index.html' : `${savePath.replace(/^\//, '')}/index.html`;
-            const filePath = path.join(distPath, fileName);
-            const fileDir = path.dirname(filePath);
-
-            if (!fs.existsSync(fileDir)) {
-                fs.mkdirSync(fileDir, { recursive: true });
-            }
-
-            fs.writeFileSync(filePath, finalContent);
-
-        } catch (e) {
-            console.error(`Error rendering route ${savePath}:`, e);
+        const root = parse(content as string);
+        const dataAttr =
+          root.rawAttrs && root.rawAttrs.match(/data-jigsaw="([^"]+)"/);
+        if (dataAttr && dataAttr[1]) {
+          data = JSON.parse(decodeURIComponent(dataAttr[1]));
         }
+      } catch (e) {
+        console.warn('Failed to parse data-jigsaw attribute:', e);
+      }
+
+      let finalContent = this.cleanupEmptyElements(content as string, data);
+      finalContent = this.injectHead(finalContent, meta, scripts);
+
+      const fileName =
+        savePath === '/'
+          ? 'index.html'
+          : `${savePath.replace(/^\//, '')}/index.html`;
+      const filePath = path.join(distPath, fileName);
+      const fileDir = path.dirname(filePath);
+
+      if (!fs.existsSync(fileDir)) {
+        fs.mkdirSync(fileDir, { recursive: true });
+      }
+
+      fs.writeFileSync(filePath, finalContent);
+    } catch (e) {
+      console.error(`Error rendering route ${savePath}:`, e);
+    }
   }
 
   private static copyDir(src: string, dest: string): void {
@@ -475,60 +552,80 @@ class JigSaw {
     const entries = fs.readdirSync(src, { withFileTypes: true });
 
     for (const entry of entries) {
-        const srcPath = path.join(src, entry.name);
-        const destPath = path.join(dest, entry.name);
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
 
-        if (entry.isDirectory()) {
-            this.copyDir(srcPath, destPath);
-        } else {
-            fs.copyFileSync(srcPath, destPath);
-        }
+      if (entry.isDirectory()) {
+        this.copyDir(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
     }
   }
 
-  private static matchRoutePattern(routePath: string, path: string): [string, Record<string, string>] {
-      const routeParts = routePath.split('/');
-      const pathParts = path.split('/');
-      if (routeParts.length === pathParts.length) {
-        const params: Record<string, string> = {};
-        let match = true;
-        for (let i = 0; i < routeParts.length; i++) {
-          if (routeParts[i].startsWith(':')) {
-            params[routeParts[i].slice(1)] = pathParts[i];
-          } else if (routeParts[i] !== pathParts[i]) {
-            match = false; break;
-          }
+  private static matchRoutePattern(
+    routePath: string,
+    path: string,
+  ): [string, Record<string, string>] {
+    const routeParts = routePath.split('/');
+    const pathParts = path.split('/');
+    if (routeParts.length === pathParts.length) {
+      const params: Record<string, string> = {};
+      let match = true;
+      for (let i = 0; i < routeParts.length; i++) {
+        if (routeParts[i].startsWith(':')) {
+          params[routeParts[i].slice(1)] = pathParts[i];
+        } else if (routeParts[i] !== pathParts[i]) {
+          match = false;
+          break;
         }
-        if (match) return [routePath, params];
       }
-      return ['', {}];
+      if (match) return [routePath, params];
+    }
+    return ['', {}];
   }
 
   private static getContentType(ext: string): string {
     const contentTypes: Record<string, string> = {
-        '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript',
-        '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon', '.txt': 'text/plain', '.pdf': 'application/pdf',
-        '.xml': 'application/xml', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4',
-        '.webm': 'video/webm', '.woff': 'font/woff', '.woff2': 'font/woff2',
-        '.ttf': 'font/ttf', '.otf': 'font/otf',
-      };
-      return contentTypes[ext.toLowerCase()] || 'application/octet-stream';
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.js': 'text/javascript',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+      '.txt': 'text/plain',
+      '.pdf': 'application/pdf',
+      '.xml': 'application/xml',
+      '.mp3': 'audio/mpeg',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.woff': 'font/woff',
+      '.woff2': 'font/woff2',
+      '.ttf': 'font/ttf',
+      '.otf': 'font/otf',
+    };
+    return contentTypes[ext.toLowerCase()] || 'application/octet-stream';
   }
-  
+
   static loadComponents(): void {
-     if (!fs.existsSync(this.componentsDir)) return;
-     const files = fs.readdirSync(this.componentsDir);
-     files.forEach((file) => {
-       if (file.startsWith('_') && file.endsWith('.jig')) {
-         const componentName = file.slice(1, -4);
-         const content = fs.readFileSync(path.join(this.componentsDir, file), 'utf-8');
-         this.components.set(componentName, content);
-       }
-     });
+    if (!fs.existsSync(this.componentsDir)) return;
+    const files = fs.readdirSync(this.componentsDir);
+    files.forEach((file) => {
+      if (file.startsWith('_') && file.endsWith('.jig')) {
+        const componentName = file.slice(1, -4);
+        const content = fs.readFileSync(
+          path.join(this.componentsDir, file),
+          'utf-8',
+        );
+        this.components.set(componentName, content);
+      }
+    });
   }
-  
+
   static getComponent(name: string): string {
     return this.components.get(name) || '';
   }
@@ -543,7 +640,7 @@ class JigSaw {
     this.watcher = chokidar.watch(watchPaths, {
       ignored: /(^|[\/\\])\../,
       persistent: true,
-      ignoreInitial: true
+      ignoreInitial: true,
     });
 
     this.watcher
@@ -556,71 +653,75 @@ class JigSaw {
 
   private static async handleFileChange(
     filePath: string,
-    changeType: 'added' | 'changed' | 'removed'
+    changeType: 'added' | 'changed' | 'removed',
   ): Promise<void> {
     const ext = path.extname(filePath);
-    
+
     if (ext === '.jig') {
-        const isComponent = filePath.includes(this.componentsDir);
-        const name = isComponent
-            ? this.getComponentNameFromPath(filePath)
-            : this.getTemplateNameFromPath(filePath);
+      const isComponent = filePath.includes(this.componentsDir);
+      const name = isComponent
+        ? this.getComponentNameFromPath(filePath)
+        : this.getTemplateNameFromPath(filePath);
 
-        if (changeType === 'removed') {
-            isComponent ? this.components.delete(name) : this.templates.delete(name);
-            this.astCache.delete(filePath);
-            this.broadcastHMR({ type: 'reload' });
-            return;
-        }
-
-        // Load new content
-        const content = fs.readFileSync(filePath, 'utf-8');
-        
-        // Create temporary Knob to get AST
-        const newKnob = new Knob(content, name);
-        let newAST;
-        try {
-            newAST = newKnob.getAST();
-        } catch (e) {
-            console.error(`[HMR] Parse error in ${name}:`, e);
-            return; // Don't reload if syntax error
-        }
-
-        // Diff against cached AST
-        const oldAST = this.astCache.get(filePath);
-        let hmrMessage: { type: string; islands?: string[] };
-
-        if (!oldAST) {
-            hmrMessage = { type: 'reload' };
-        } else {
-            const { diffJigsawAST } = await import('./differ');
-            hmrMessage = diffJigsawAST(oldAST, newAST);
-        }
-
-        // Update caches
-        this.astCache.set(filePath, newAST);
-        isComponent ? this.components.set(name, content) : this.templates.set(name, newKnob);
-        
-        this.clearCache();
-        Knob.clearCache();
-        
-        this.broadcastHMR(hmrMessage);
+      if (changeType === 'removed') {
+        isComponent
+          ? this.components.delete(name)
+          : this.templates.delete(name);
+        this.astCache.delete(filePath);
+        this.broadcastHMR({ type: 'reload' });
         return;
+      }
+
+      // Load new content
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      // Create temporary Knob to get AST
+      const newKnob = new Knob(content, name);
+      let newAST;
+      try {
+        newAST = newKnob.getAST();
+      } catch (e) {
+        console.error(`[HMR] Parse error in ${name}:`, e);
+        return; // Don't reload if syntax error
+      }
+
+      // Diff against cached AST
+      const oldAST = this.astCache.get(filePath);
+      let hmrMessage: { type: string; islands?: string[] };
+
+      if (!oldAST) {
+        hmrMessage = { type: 'reload' };
+      } else {
+        const { diffJigsawAST } = await import('./differ');
+        hmrMessage = diffJigsawAST(oldAST, newAST);
+      }
+
+      // Update caches
+      this.astCache.set(filePath, newAST);
+      isComponent
+        ? this.components.set(name, content)
+        : this.templates.set(name, newKnob);
+
+      this.clearCache();
+      Knob.clearCache();
+
+      this.broadcastHMR(hmrMessage);
+      return;
     }
 
     if (ext === '.css') {
-        this.broadcastHMR({ type: 'css-update', file: path.basename(filePath) });
+      this.broadcastHMR({ type: 'css-update', file: path.basename(filePath) });
     }
   }
 
   private static broadcastHMR(message: object): void {
     if (!this.wss) return;
-    
+
     const data = JSON.stringify(message);
-    this.wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(data);
-        }
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
     });
   }
 
@@ -659,32 +760,41 @@ class JigSaw {
     `;
 
     if (html.includes('</body>')) {
-        return html.replace('</body>', `${script}</body>`);
+      return html.replace('</body>', `${script}</body>`);
     } else {
-        return html + script;
+      return html + script;
+    }
+  }
+
+  private static injectScript(html: string, scriptContent: string): string {
+    const scriptTag = `<script>${scriptContent}</script>`;
+    if (html.includes('</body>')) {
+      return html.replace('</body>', `${scriptTag}\\n</body>`);
+    } else {
+      return html + scriptTag;
     }
   }
 
   private static injectMorphdom(html: string): string {
     // Only inject morphdom in development mode for HMR
     if (process.env.NODE_ENV === 'production') {
-        return html;
+      return html;
     }
 
     const script = '<script src="/static/morphdom.js" defer></script>';
     if (html.includes('</body>')) {
-        return html.replace('</body>', `${script}\n</body>`);
+      return html.replace('</body>', `${script}\n</body>`);
     } else {
-        return html + script;
+      return html + script;
     }
   }
 
-
-
-
-
-  private static getComponentNameFromPath(filePath: string): string { return path.basename(filePath, '.jig'); }
-  private static getTemplateNameFromPath(filePath: string): string { return path.basename(filePath, '.jig'); }
+  private static getComponentNameFromPath(filePath: string): string {
+    return path.basename(filePath, '.jig');
+  }
+  private static getTemplateNameFromPath(filePath: string): string {
+    return path.basename(filePath, '.jig');
+  }
   private static loadComponent(path: string): void {
     const componentName = this.getComponentNameFromPath(path);
     const content = fs.readFileSync(path, 'utf-8');
@@ -704,21 +814,31 @@ class JigSaw {
       }
     });
   }
-  private static getCacheKey(routePath: string, params?: Record<string, string>): string {
+  private static getCacheKey(
+    routePath: string,
+    params?: Record<string, string>,
+  ): string {
     if (!params) return routePath;
-    return `${routePath}?${Object.entries(params).map(([k, v]) => `${k}=${v}`).join('&')}`;
+    return `${routePath}?${Object.entries(params)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('&')}`;
   }
   private static isCacheExpired(cachedRoute: CachedRoute): boolean {
     return Date.now() - cachedRoute.lastUpdated > 5 * 60 * 1000;
   }
-  private static clearCache(): void { this.routeCache.clear(); }
-  
-  private static processHtml(html: string, data?: TemplateData): string {
-      return this.cleanupEmptyElements(html, data);
+  private static clearCache(): void {
+    this.routeCache.clear();
   }
 
-  private static cleanupEmptyElements(html: string, data?: TemplateData): string {
-      return html;
+  private static processHtml(html: string, data?: TemplateData): string {
+    return this.cleanupEmptyElements(html, data);
+  }
+
+  private static cleanupEmptyElements(
+    html: string,
+    data?: TemplateData,
+  ): string {
+    return html;
   }
 }
 

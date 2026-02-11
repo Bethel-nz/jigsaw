@@ -46,5 +46,6 @@ export interface RenderResult {
   html: string;
   meta: Record<string, any>;
   scripts: { content: string }[];
+  handlers?: Map<string, string>;
   toString(): string;
 }

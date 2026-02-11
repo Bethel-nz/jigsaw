@@ -1,2 +1,3 @@
 # Jigsaw cache
 .jigsaw-cache/
+node_modules

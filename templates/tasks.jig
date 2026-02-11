@@ -1,0 +1,198 @@
+@meta {{
+  scripts: [
+    (src: "/static/morphdom.js"),
+    (src: "/static/jigsaw-router.js?v=10", defer: true)
+  ]
+}}
+
+<style>
+  /* Individual task item animations */
+  ::view-transition-old(task-item-*):only-child {
+    animation: 0.25s ease-out both fade-out;
+  }
+  
+  ::view-transition-new(task-item-*):only-child {
+    animation: 0.25s ease-in both slide-up;
+  }
+  
+  @keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .task-item {
+    contain: layout;
+  }
+</style>
+
+<div class="app-container" style="max-width: 600px; margin: 2rem auto; font-family: system-ui, sans-serif;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="margin: 0;">Task Manager</h1>
+    <span style="background: #eef2ff; color: #4f46e5; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.875rem; font-weight: 500;">
+      Jigsaw Engine Demo
+    </span>
+  </div>
+
+  <!-- Input Area -->
+  <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem;">
+    <input 
+      type="text" 
+      @state="newTask" 
+      placeholder="What needs doing?"
+      style="flex: 1; padding: 0.75rem 1rem; border: 1px solid #ddd; border-radius: 0.5rem; font-size: 1rem;"
+      @keydown="$state.newTask && event.key === 'Enter' ? addTask() : null"
+    >
+    <button 
+      @click="addTask()"
+      style="padding: 0.75rem 1.5rem; background: #4f46e5; color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background 0.2s;"
+      @mouseenter="$el.css('background', '#4338ca')"
+      @mouseleave="$el.css('background', '#4f46e5')"
+    >
+      Add
+    </button>
+  </div>
+
+  <!-- Task List with View Transition -->
+  {% transition "fade" %}
+  <div data-ref="list" @init="initTasks" class="task-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+    <div style="text-align: center; padding: 3rem; color: #9ca3af; background: #f9fafb; border-radius: 0.5rem; border: 2px dashed #e5e7eb;">
+      No tasks yet. Add one above!
+    </div>
+  </div>
+  {% endtransition %}
+</div>
+
+@fn initTasks() {
+  console.log('[initTasks] Starting');
+  if (!$state.tasks) {
+    $state.tasks = [];
+  }
+  
+  // Set up reactive effect that auto-renders ONLY when 'tasks' changes
+  $effect((s) => {
+    console.log('[Effect] Triggered! tasks count:', (s.tasks || []).length);
+    const tasks = s.tasks || [];
+    
+    // Render with View Transition
+    if (document.startViewTransition) {
+      document.startViewTransition(() => doRender(tasks));
+    } else {
+      doRender(tasks);
+    }
+  }, ['tasks']); // Only watch 'tasks', ignore 'newTask' changes
+  
+  console.log('[initTasks] Effect registered');
+}
+
+@fn doRender(tasks) {
+  const list = $ref.list;
+  if (!list) return;
+  
+  if (tasks.length === 0) {
+    list.raw.innerHTML = `
+      <div style="text-align: center; padding: 3rem; color: #9ca3af; background: #f9fafb; border-radius: 0.5rem; border: 2px dashed #e5e7eb;">
+        No tasks yet. Add one above!
+      </div>
+    `;
+    return;
+  }
+  
+  // Generate a simple hash for unique view-transition-name
+  const hash = (s) => s.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0) >>> 0;
+  
+  const newHtml = tasks.map((task, index) => `
+    <div 
+      class="task-item ${task.completed ? 'completed' : ''}" 
+      data-task-id="${hash(task.text + index)}"
+      data-index="${index}"
+      draggable="true"
+      data-on-dragstart="onDragStart(event, ${index})"
+      data-on-dragend="onDragEnd(event)"
+      data-on-dragover="onDragOver(event)"
+      data-on-drop="onDrop(event, ${index})"
+      style="view-transition-name: task-item-${hash(task.text + index)}; display: flex; align-items: center; gap: 1rem; padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: grab; transition: transform 0.2s, opacity 0.2s;"
+    >
+      <div 
+        class="checkbox" 
+        data-on-click="toggleTask(${index})"
+        style="width: 20px; height: 20px; border: 2px solid ${task.completed ? '#4f46e5' : '#d1d5db'}; border-radius: 4px; cursor: pointer; display: grid; place-items: center; background: ${task.completed ? '#4f46e5' : 'transparent'}; transition: all 0.2s;"
+      >${task.completed ? '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5L2 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}</div>
+      <span style="flex: 1; font-size: 1rem; ${task.completed ? 'text-decoration: line-through; color: #9ca3af;' : ''}">${task.text}</span>
+      <button 
+        data-on-click="removeTask(${index})"
+        style="color: #ef4444; background: none; border: none; cursor: pointer; padding: 0.5rem; opacity: 0.5; transition: opacity 0.2s;"
+        data-on-mouseenter="this.style.opacity = '1'"
+        data-on-mouseleave="this.style.opacity = '0.5'"
+      >Delete</button>
+    </div>
+  `).join('');
+  
+  list.raw.innerHTML = newHtml;
+}
+
+@fn addTask() {
+  console.log('[addTask] Called');
+  const text = $state.newTask;
+  console.log('[addTask] text:', text);
+  if (!text || !text.trim()) return;
+  
+  const currentTasks = $state.tasks || [];
+  console.log('[addTask] Current tasks:', currentTasks.length);
+  
+  // This should trigger all registered effects via notifyEffects()
+  $state.tasks = [...currentTasks, { text: text.trim(), completed: false }];
+  console.log('[addTask] Set new tasks, effect should have been notified');
+  
+  $state.newTask = '';
+}
+
+@fn toggleTask(index) {
+  console.log('[toggleTask] index:', index);
+  const tasks = [...($state.tasks || [])];
+  tasks[index] = { ...tasks[index], completed: !tasks[index].completed };
+  $state.tasks = tasks;
+}
+
+@fn removeTask(index) {
+  console.log('[removeTask] index:', index);
+  $state.tasks = ($state.tasks || []).filter((_, i) => i !== index);
+}
+
+@fn onDragStart(e, index) {
+  $state.dragIndex = index;
+  e.target.style.opacity = '0.5';
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+@fn onDragEnd(e) {
+  e.target.style.opacity = '1';
+  $state.dragIndex = null;
+}
+
+@fn onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const item = e.target.closest('.task-item');
+  if (item) {
+    item.style.borderTop = '2px solid #4f46e5';
+  }
+}
+
+@fn onDrop(e, dropIndex) {
+  e.preventDefault();
+  const item = e.target.closest('.task-item');
+  if (item) item.style.borderTop = '';
+  
+  const dragIndex = $state.dragIndex;
+  if (dragIndex === null || dragIndex === dropIndex) return;
+  
+  // Swap the tasks
+  const tasks = [...$state.tasks];
+  [tasks[dragIndex], tasks[dropIndex]] = [tasks[dropIndex], tasks[dragIndex]];
+  $state.tasks = tasks;
+}

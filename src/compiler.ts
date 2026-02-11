@@ -1,10 +1,19 @@
 import { ASTNode } from './parser';
 
+export interface CompiledTemplate {
+  code: string;
+  handlers: Map<string, string>;
+}
+
 export class Compiler {
   private scope: Set<string>[] = [new Set()];
+  private handlers: Map<string, string> = new Map();
+  private handlerCounter = 0;
 
-  compile(node: ASTNode): string {
-    return `(function(data, pipes, helper, context) { 
+  compile(node: ASTNode): CompiledTemplate {
+    this.handlers.clear();
+    this.handlerCounter = 0;
+    const code = `(function(data, pipes, helper, context) { 
       const __output = [];
       function __append(str) { __output.push(str); }
       function __escape(str) { 
@@ -47,54 +56,77 @@ export class Compiler {
       
       return __output.join('');
     })`;
+
+    return { code, handlers: new Map(this.handlers) };
+  }
+
+  private createHandlerId(): string {
+    return `jg_${Math.random().toString(36).substr(2, 9)}_${this.handlerCounter++}`;
+  }
+
+  private registerHandler(code: string): string {
+    const id = this.createHandlerId();
+    this.handlers.set(id, code);
+    return id;
   }
 
   private visit(node: ASTNode): string {
     switch (node.type) {
       case 'Program':
-        return node.body.map(child => this.visit(child)).join('\n');
+        return node.body.map((child) => this.visit(child)).join('\n');
       case 'Text':
         // Transform event handlers: @{event}="..." to data-on-{event}="..."
         // Supports: @click, @submit, @input, @change, @focus, @blur, etc.
         let transformed = node.value;
-        
+
         // Common events to support
-        const events = [
-          'click', 'dblclick',
-          'submit', 'reset',
-          'input', 'change', 'keydown', 'keyup', 'keypress',
-          'focus', 'blur',
-          'mouseenter', 'mouseleave', 'mouseover', 'mouseout',
-          'touchstart', 'touchend', 'touchmove'
-        ];
-        
-        // Transform each event type
-        events.forEach(event => {
-          transformed = transformed
-            .replace(new RegExp(`@${event}="([\\s\\S]*?)"`, 'g'), `data-on-${event}="$1"`)
-            .replace(new RegExp(`@${event}='([\\s\\S]*?)'`, 'g'), `data-on-${event}='$1'`);
-        });
-        
-        // Transform @sync to data-sync
+        // 1. Transform specific directives (simple key replacement to support interpolations)
+        // We look for @directive= followed by a quote
         transformed = transformed
-          .replace(/@sync="([^"]+)"/g, 'data-sync="$1"')
-          .replace(/@sync='([^']+)'/g, "data-sync='$1'");
+          .replace(/@sync=(?=["'])/g, 'data-sync=')
+          .replace(/@state=(?=["'])/g, 'data-state=')
+          .replace(/@init=(?=["'])/g, 'data-init=')
+          .replace(/@ref=(?=["'])/g, 'data-ref=')
+          .replace(/@bind=(?=["'])/g, 'data-bind=');
 
-        // Transform @state to data-state
-        transformed = transformed
-          .replace(/@state="([^"]+)"/g, 'data-state="$1"')
-          .replace(/@state='([^']+)'/g, "data-state='$1'");
+        // 2. Generic Event Transformation: @event="..." -> data-on-event="handler_id"
 
-        // Transform @init to data-init
-        transformed = transformed
-          .replace(/@init="([^"]+)"/g, 'data-init="$1"')
-          .replace(/@init='([^']+)'/g, "data-init='$1'");
-        
+        const replaceEventHandler = (
+          match: string,
+          event: string,
+          quote: string,
+          code: string,
+        ) => {
+          const handlerId = this.registerHandler(code);
+          return `data-on-${event}="${handlerId}"`;
+        };
+
+        // Match @event="code"
+        transformed = transformed.replace(
+          /@([a-zA-Z0-9_-]+)="([^"]*)"/g,
+          (match, event, code) => {
+            return replaceEventHandler(match, event, '"', code);
+          },
+        );
+
+        // Match @event='code'
+        transformed = transformed.replace(
+          /@([a-zA-Z0-9_-]+)='([^']*)'/g,
+          (match, event, code) => {
+            return replaceEventHandler(match, event, "'", code);
+          },
+        );
+
         return `__append(${JSON.stringify(transformed)});`;
       case 'Meta':
         // node.properties is { key: string, value: ASTNode }[]
         // We compile to an array of entries to preserve duplicate keys (like multiple 'link' tags)
-        const metaEntries = node.properties.map(p => `{ key: '${p.key}', value: ${this.visitExpression(p.value)} }`).join(', ');
+        const metaEntries = node.properties
+          .map(
+            (p) =>
+              `{ key: '${p.key}', value: ${this.visitExpression(p.value)} }`,
+          )
+          .join(', ');
         return `
           if (context && context.meta) {
             try {
@@ -108,6 +140,20 @@ export class Compiler {
                     const existingArray = Array.isArray(existing) ? existing : (existing ? [existing] : []);
                     const incomingArray = Array.isArray(value) ? value : (value ? [value] : []);
                     context.meta[key] = [...existingArray, ...incomingArray];
+                 } else if (key === 'scripts') {
+                    // Handle scripts array: push to context.scripts with formatted attributes
+                    if (context.scripts) {
+                      const scriptsArray = Array.isArray(value) ? value : (value ? [value] : []);
+                      scriptsArray.forEach(script => {
+                        if (typeof script === 'object' && script !== null) {
+                          const attrs = Object.entries(script).map(([k, v]) => {
+                            if (v === true) return k;
+                            return k + '="' + v + '"';
+                          }).join(' ');
+                          context.scripts.push({ content: attrs });
+                        }
+                      });
+                    }
                  } else {
                     // For other keys, last one wins (standard object behavior)
                     context.meta[key] = value;
@@ -120,29 +166,34 @@ export class Compiler {
         // Use JSON.stringify to safely escape quotes and special characters
         return `if (context && context.scripts) context.scripts.push({ content: ${JSON.stringify(node.content)} });`;
       case 'FnDefinition':
-        const safeName = node.name;
-        const safeArgs = node.args.replace(/"/g, '&quot;');
-        const safeBody = node.body.replace(/<\/script>/gi, '<\\/script>');
-        return `__append('<script type="jigsaw/fn" data-name="${safeName}" data-args="${safeArgs}">${safeBody}</script>');`;
+        const scriptTag = `<script type="jigsaw/fn" data-name="${node.name}" data-args="${node.args.replace(/"/g, '&quot;')}">${node.body.replace(/<\/script>/gi, '<\\/script>')}</script>`;
+        return `__append(${JSON.stringify(scriptTag)});`;
       case 'Interpolation':
         // Handle @sync directive: {{ @sync user.name }}
         if (node.value.type === 'Identifier' && node.value.name === '@sync') {
           // This is a special case - we'll handle it differently
           // For now, treat it as an error since @sync needs an argument
-          throw new Error('@sync requires a variable: {{ @sync variableName }}');
+          throw new Error(
+            '@sync requires a variable: {{ @sync variableName }}',
+          );
         }
-        
+
         // Check if this is a member expression starting with @sync
-        if (node.value.type === 'MemberExpression' && 
-            node.value.object.type === 'Identifier' && 
-            node.value.object.name === '@sync') {
+        if (
+          node.value.type === 'MemberExpression' &&
+          node.value.object.type === 'Identifier' &&
+          node.value.object.name === '@sync'
+        ) {
           // {{ @sync user.name }} -> <span data-sync="user.name">value</span>
           const syncPath = this.getSyncPath(node.value);
           const valueExpr = this.visitExpression(node.value.property);
           return `__append('<span data-sync="' + ${JSON.stringify(syncPath)} + '">' + __escape(${valueExpr}) + '</span>');`;
         }
-        
-        if (node.value.type === 'CallExpression' && node.value.callee === 'safe') {
+
+        if (
+          node.value.type === 'CallExpression' &&
+          node.value.callee === 'safe'
+        ) {
           // Inline the safe pipe: just append the first argument without escaping
           const arg = node.value.arguments[0];
           return `__append(${this.visitExpression(arg)});`;
@@ -150,8 +201,12 @@ export class Compiler {
         return `__append(__escape(${this.visitExpression(node.value)}));`;
       case 'IfStatement':
         const condition = this.visitExpression(node.condition);
-        const consequent = node.consequent.map(child => this.visit(child)).join('\n');
-        const alternate = node.alternate ? node.alternate.map(child => this.visit(child)).join('\n') : '';
+        const consequent = node.consequent
+          .map((child) => this.visit(child))
+          .join('\n');
+        const alternate = node.alternate
+          ? node.alternate.map((child) => this.visit(child)).join('\n')
+          : '';
         return `if (${condition}) { ${consequent} } else { ${alternate} }`;
       case 'ForLoop':
         this.pushScope();
@@ -159,11 +214,11 @@ export class Compiler {
         this.addVar(`${node.item}_index`);
         this.addVar(`${node.item}_first`);
         this.addVar(`${node.item}_last`);
-        
+
         const collection = this.visitExpression(node.collection);
-        const body = node.body.map(child => this.visit(child)).join('\n');
+        const body = node.body.map((child) => this.visit(child)).join('\n');
         this.popScope();
-        
+
         return `
         (function() {
           const __collection = ${collection};
@@ -180,52 +235,51 @@ export class Compiler {
           }
         })();`;
       case 'Island':
-        const islandBody = node.body.map(child => this.visit(child)).join('\n');
+        const islandBody = node.body
+          .map((child) => this.visit(child))
+          .join('\n');
         return `__append('<div data-island="${node.name}" data-island-static>'); ${islandBody} __append('</div>');`;
       case 'Transition':
-        const transitionBody = node.body.map(child => this.visit(child)).join('\n');
+        const transitionBody = node.body
+          .map((child) => this.visit(child))
+          .join('\n');
         return `__append('<div data-transition-type="${node.name}">'); ${transitionBody} __append('</div>');`;
       case 'Component':
         // Build props object if component has props
         let propsCode = 'data';
         let extraProps = [];
-        
+
         if (node.props && Object.keys(node.props).length > 0) {
           const propEntries = Object.entries(node.props)
             .map(([key, value]) => `${key}: ${this.visitExpression(value)}`)
             .join(', ');
           extraProps.push(propEntries);
         }
-        
+
         // Handle Body (Fragment)
         if (node.body && node.body.length > 0) {
-            const bodyContent = node.body.map(child => this.visit(child)).join('\n');
-            // We wrap the body in an IIFE that returns the rendered string
-            // We must ensure __append captures to a local buffer or we use a separate helper
-            // Actually, our current compile structure uses a local __output array.
-            // If we nest, we need a NEW __output array.
-            // So we can just call the main compile function recursively? 
-            // No, 'visit' returns code that appends to __output.
-            // So we need to create a new scope for __output.
-            const fragmentCode = `(function() {
+          const bodyContent = node.body
+            .map((child) => this.visit(child))
+            .join('\n');
+          const fragmentCode = `(function() {
                 const __output = [];
                 function __append(str) { __output.push(str); }
                 // We inherit other helpers (__escape, __get, etc) from parent scope
                 ${bodyContent}
                 return __output.join('');
             })()`;
-            extraProps.push(`fragment: ${fragmentCode}`);
+          extraProps.push(`fragment: ${fragmentCode}`);
         }
-        
+
         if (extraProps.length > 0) {
-            propsCode = `Object.assign({}, data, { ${extraProps.join(', ')} })`;
+          propsCode = `Object.assign({}, data, { ${extraProps.join(', ')} })`;
         }
-        
+
         // Wrap static components (islands) with data attribute
         if (node.isStatic) {
           return `__append('<div data-island="${node.name}" data-island-static>'); __append(helper.renderComponent('${node.name}', ${propsCode})); __append('</div>');`;
         }
-        
+
         return `__append(helper.renderComponent('${node.name}', ${propsCode}));`;
       default:
         return '';
@@ -236,9 +290,16 @@ export class Compiler {
     switch (node.type) {
       case 'Literal':
         return JSON.stringify(node.value);
+      case 'ArrayLiteral':
+        const elements = node.elements
+          .map((el: ASTNode) => this.visitExpression(el))
+          .join(', ');
+        return `[${elements}]`;
       case 'ObjectLiteral':
         // @ts-ignore
-        const props = node.properties.map(p => `${p.key}: ${this.visitExpression(p.value)}`).join(', ');
+        const props = node.properties
+          .map((p) => `${p.key}: ${this.visitExpression(p.value)}`)
+          .join(', ');
         return `{ ${props} }`;
       case 'Identifier':
         if (node.name === 'helper') return 'helper';
@@ -253,10 +314,14 @@ export class Compiler {
       case 'UnaryExpression':
         return `(${node.operator} ${this.visitExpression(node.argument)})`;
       case 'CallExpression':
-        const args = node.arguments.map(arg => this.visitExpression(arg)).join(', ');
+        const args = node.arguments
+          .map((arg) => this.visitExpression(arg))
+          .join(', ');
         return `pipes['${node.callee}'] ? pipes['${node.callee}'](${args}) : (function(){ throw new Error("Pipe '${node.callee}' not found"); })()`;
       case 'FunctionCall':
-        const fnArgs = node.arguments.map(arg => this.visitExpression(arg)).join(', ');
+        const fnArgs = node.arguments
+          .map((arg) => this.visitExpression(arg))
+          .join(', ');
         const callee = this.visitExpression(node.callee);
         return `__callFunction(${callee}, [${fnArgs}])`;
       default:
@@ -284,7 +349,7 @@ export class Compiler {
     }
     return false;
   }
-  
+
   private getSyncPath(node: ASTNode): string {
     // Build the path for data-sync attribute
     // Example: @sync.user.name -> "user.name"

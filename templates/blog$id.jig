@@ -1,0 +1,14 @@
+<div class="post-container">
+  <a href="/blog" data-transition="slide-right" style="color: #666; font-size: 0.9rem;">← Back to Blog</a>
+  
+  <article style="margin-top: 2rem;">
+    <h1>{{ post.title }}</h1>
+    <div style="color: #666; margin-bottom: 2rem;">
+      Published on {{ post.date }}
+    </div>
+    
+    <div style="font-size: 1.1rem; line-height: 1.8;">
+      {{ post.content }}
+    </div>
+  </article>
+</div>

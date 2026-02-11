@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<style>
+		@keyframes bump {
+			0% {
+				transform: scale(1);
+			}
+
+			50% {
+				transform: scale(1.2);
+			}
+
+			100% {
+				transform: scale(1);
+			}
+		}
+
+		.bump {
+			animation: bump 0.3s ease-out;
+		}
+	</style>
+</head>
+@meta {{
+title: "NØIR",
+link: (rel: "stylesheet", href: "/static/noir.css")
+}}
+
+<body>
+	<div id="jigsaw-root">
+		<!-- Persistent Nav Island -->
+		{% island "noir-nav" %}
+		<header class="noir-nav">
+			<nav class="noir-nav-inner">
+				<a href="/" class="noir-brand" data-transition="fade">
+					<span class="glitch-wrapper">
+						<span class="glitch-text" data-ref="glitch1" aria-hidden="true">NØIR</span>
+						<span class="glitch-text-main">NØIR</span>
+						<span class="glitch-text glitch-text-2" data-ref="glitch2" aria-hidden="true">NØIR</span>
+					</span>
+				</a>
+
+				<div class="noir-nav-links">
+					<a href="/collection" class="noir-nav-link" data-transition="fade">Collection</a>
+					<button class="noir-cart-btn" @click="openCart()" aria-label="Open cart">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+							<line x1="3" y1="6" x2="21" y2="6" />
+							<path d="M16 10a4 4 0 01-8 0" />
+						</svg>
+						<span class="noir-cart-badge" @ref="cartBadge" @state="cartCount" @sync="cartCount"
+							style="display:none;">0</span>
+					</button>
+				</div>
+			</nav>
+		</header>
+		{% endisland %}
+
+		<!-- Cart Drawer -->
+		<div data-ref="overlay" class="noir-overlay" @click="closeCart()"></div>
+		<aside data-ref="drawer" class="noir-drawer" role="dialog" aria-label="Shopping cart">
+			<div class="noir-drawer-header">
+				<h2 class="noir-drawer-title">Cart (<span data-ref="cartCount">0</span>)</h2>
+				<button class="noir-drawer-close" @click="closeCart()" aria-label="Close cart">✕</button>
+			</div>
+			<div class="noir-drawer-body" data-ref="cartBody">
+				<div class="noir-drawer-empty">Empty</div>
+			</div>
+			<div class="noir-drawer-footer" data-ref="cartFooter" style="display:none;">
+				<div class="noir-cart-total">
+					<span class="noir-cart-total-label">Total</span>
+					<span class="noir-cart-total-value" data-ref="cartTotal">$0</span>
+				</div>
+				<button class="noir-checkout-btn" @click="alert('Checkout coming soon')">Checkout</button>
+				<button class="noir-clear-btn" @click="clearCart()">Clear Cart</button>
+			</div>
+		</aside>
+
+		@fn openCart() {
+		$ref.overlay.addClass('open');
+		$ref.drawer.addClass('open');
+		document.body.style.overflow = 'hidden';
+		renderCart();
+		}
+
+		@fn closeCart() {
+		$ref.overlay.removeClass('open');
+		$ref.drawer.removeClass('open');
+		document.body.style.overflow = '';
+		}
+
+		@fn clearCart() {
+		$state.cart = [];
+		$state.cartCount = 0;
+		renderCart();
+		closeCart();
+		}
+
+
+		<!-- Reactive Cart Listener: Ensures renderCart runs when cart changes -->
+		<div style="display:none" @init="$effect(renderCart, ['cart'])"></div>
+
+		@fn renderCart() {
+		var items = $state.cart || [];
+		var totalItems = 0;
+		var totalPrice = 0;
+
+		// 1. Calculate items and total price
+		for (var i = 0; i < items.length; i++) { totalItems +=items[i].qty; totalPrice +=items[i].price * items[i].qty;
+			} /* 2. Update Badge State */ $state.cartCount=totalItems; $ref.cartBadge.css('display', totalItems> 0 ?
+			'flex' : 'none');
+			$ref.cartCount.text(totalItems);
+
+			// 3. Handle Empty State
+			if (items.length === 0) {
+			$ref.cartBody.html('<div class="noir-drawer-empty">Empty</div>');
+			$ref.cartFooter.css('display', 'none');
+			return;
+			}
+
+			// 4. Update Footer
+			$ref.cartFooter.css('display', 'flex');
+			$ref.cartTotal.text('$' + totalPrice);
+
+			// 5. Render Items
+			const html = items.map(item => `
+			<div class="noir-cart-item">
+				<div class="noir-cart-thumb"></div>
+				<div class="noir-cart-details">
+					<div class="noir-cart-item-top">
+						<div class="noir-cart-item-name">${item.name}</div>
+						<div class="noir-cart-item-price">$${item.price}</div>
+					</div>
+					<div class="noir-cart-item-meta">${item.category} / Qty: ${item.qty}</div>
+				</div>
+			</div>
+			`).join('');
+
+			$ref.cartBody.html(html);
+			}
+
+			@fn addToCart(id, name, category, price) {
+			console.log('[NØIR] addToCart called:', id);
+
+			// Ensure cart exists
+			if (!$state.cart) $state.cart = [];
+
+			// Handle object passed as first arg
+			if (typeof id === 'object' && id !== null) {
+			var product = id;
+			id = product.id;
+			name = product.name;
+			category = product.category;
+			price = product.price;
+			}
+
+			// Check for existing item
+			var existing = $state.cart.find(function(i) { return i.id === id; });
+
+			if (existing) {
+			existing.qty++;
+			} else {
+			$state.cart.push({
+			id: id,
+			name: name,
+			category: category,
+			price: price,
+			qty: 1
+			});
+			}
+
+			// Trigger reactivity (reassign array)
+			$state.cart = [].concat($state.cart);
+
+			// Update total count
+			var total = 0;
+			for (var i = 0; i < $state.cart.length; i++) { total +=$state.cart[i].qty; } $state.cartCount=total; /*
+				Optional: Animation or auto-open */ var badge=document.querySelector('.noir-cart-btn svg'); if (badge) {
+				badge.classList.remove('bump'); void badge.offsetWidth; badge.classList.add('bump'); } } {%
+				transition "fade" %} <div class="noir-content">
+				{{ content | safe }}
+	</div>
+	{% endtransition %}
+	</main>
+
+	<!-- Footer -->
+	<footer class="noir-footer">
+		<span class="noir-footer-text">NØIR © 2026</span>
+		<span class="noir-footer-text">Built with Jigsaw</span>
+	</footer>
+	</div>
+
+	<script src="/static/jigsaw-router.js?v=6" defer></script>
+
+	<script>
+		setInterval(function () {
+			var g1 = document.querySelector('[data-ref="glitch1"]');
+			var g2 = document.querySelector('[data-ref="glitch2"]');
+			if (g1 && g2) {
+				g1.classList.add('active');
+				g2.classList.add('active');
+				setTimeout(function () { g1.classList.remove('active'); g2.classList.remove('active'); }, 200);
+			}
+		}, 3000);
+	</script>
+</body>
+
+</html>

@@ -1,0 +1,62 @@
+<h1>Profiles Settings</h1>
+
+<!-- Client-side Application Container -->
+<div id="profile-app">
+  <div style="padding: 2rem; text-align: center; color: #666;">
+    Loading profile data...
+  </div>
+</div>
+
+<script>
+  (function() {
+    const container = document.getElementById('profile-app');
+    
+    // safe check
+    if (!container) return;
+
+    const pathParts = window.location.pathname.split('/');
+    // Expected path: /profiles/:id/settings
+    // parts: ["", "profiles", "123", "settings"]
+    const profileId = pathParts[2]; 
+    
+    console.log('[ProfileApp] Mounting for ID:', profileId);
+
+    // Simulate "Real World" API fetch
+    setTimeout(() => {
+      // In a real app, this would be fetch(/api/profiles/${profileId})
+      const mockData = {
+        name: `User ${profileId}`,
+        email: `user${profileId}@example.com`,
+        role: 'Administrator',
+        lastLogin: new Date().toLocaleDateString()
+      };
+
+      container.innerHTML = `
+        <div class="card" style="border: 1px solid #ddd; padding: 2rem; border-radius: 8px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+          <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="width: 64px; height: 64px; background: #eee; border-radius: 50%;"></div>
+            <div>
+              <h2 style="margin: 0;">${mockData.name}</h2>
+              <div style="color: #666;">${mockData.email}</div>
+            </div>
+          </div>
+          
+          <div style="display: grid; gap: 1rem;">
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+              <span style="font-weight: 500;">Role</span>
+              <span>${mockData.role}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+              <span style="font-weight: 500;">Last Login</span>
+              <span>${mockData.lastLogin}</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #eee; font-size: 0.8rem; color: #999; text-align: center;">
+            Loaded dynamically via client-side JavaScript
+          </div>
+        </div>
+      `;
+    }, 800); // Simulate network delay
+  })();
+</script>

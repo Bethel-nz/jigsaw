@@ -1,8 +1,0 @@
-<div class="editor" data-id="{{ note.id }}">
-  <input type="text" id="note-title" value="{{ note.title }}" placeholder="Note Title" class="editor-title">
-  <textarea id="note-content" placeholder="Start typing..." class="editor-content">{{ note.content }}</textarea>
-  <div class="editor-actions">
-    <button @click="saveNote" class="save-btn">Save</button>
-    <button @click="deleteNote" class="delete-btn">Delete</button>
-  </div>
-</div>

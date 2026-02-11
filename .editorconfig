@@ -1,0 +1,6 @@
+
+[*.jig]
+insert_final_newline = false
+trim_trailing_whitespace = false
+indent_style = tab
+indent_size = 4

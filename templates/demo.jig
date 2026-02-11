@@ -1,0 +1,101 @@
+@meta {{
+  title: "Jigsaw - The Modern Template Engine",
+  description: "A showcase of Jigsaw's powerful features including Islands, Pipes, and Components."
+}}
+
+<div class="hero">
+  <h1>Welcome to Jigsaw</h1>
+  <p class="subtitle">
+    A modern template engine featuring <strong>Islands Architecture</strong> and <strong>View Transitions</strong>.
+  </p>
+  <div class="actions">
+    <button @click="console.log('Hello from Jigsaw!')" class="btn primary">Try clicking me!</button>
+    <a href="https://github.com/jigsaw" class="btn secondary">View Source</a>
+  </div>
+</div>
+
+<div class="section-title">
+  <h2>Feature Showcase</h2>
+  <p>Explore what makes Jigsaw unique.</p>
+</div>
+
+<div class="grid feature-grid">
+  {{{ card(:title="Islands Architecture", :description="Persistent components that stay alive across navigation. Interactive islands are hydrated automatically.") / }}}
+  {{{ card(:title="View Transitions", :description="Native browser animations for smooth page loads. Navigate between pages to see it in action.") / }}}
+  {{{ card(:title="Smart Piping", :description="Transform data easily with built-in and custom pipes like upper, lower, and currency.") / }}}
+</div>
+
+<!-- Interactive Demo Section -->
+<div class="demo-section">
+  <h2>Interactive Islands</h2>
+  <div class="demo-grid">
+    
+    <!-- State Management -->
+    <div class="demo-card">
+      <h3>Client-Side State</h3>
+      <p>State persists locally within the island.</p>
+      <div class="counter-island">
+        <p>Current Count: <span @state="count" @init="0" class="count-display">0</span></p>
+        <div class="btn-group">
+          <button @click="$state.count++" class="btn sm">+</button>
+          <button @click="$state.count--" class="btn sm">-</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Handling -->
+    <div class="demo-card">
+      <h3>Event Handling</h3>
+      <p>Direct access to DOM elements with <code>$el</code>.</p>
+      <input type="text" 
+             @input="$el.nextElementSibling.textContent = 'You typing: ' + $el.value"
+             placeholder="Type something..."
+             class="demo-input">
+      <p class="input-feedback">Waiting...</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- Pipe Demo Section -->
+<div class="demo-section">
+  <h2>Power of Pipes</h2>
+  <div class="pipe-showcase">
+    <table class="pipe-table">
+      <thead>
+        <tr>
+          <th>Original</th>
+          <th>Pipe</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>"Hello World"</td>
+          <td><code>upper</code></td>
+          <td>{{ "Hello World" |> upper }}</td>
+        </tr>
+        <tr>
+          <td>"Mixed CASE Text"</td>
+          <td><code>lower</code></td>
+          <td>{{ "Mixed CASE Text" |> lower }}</td>
+        </tr>
+        <tr>
+          <td>1234.5678</td>
+          <td><code>currency</code></td>
+          <td>{{ 1234.5678 |> currency }}</td>
+        </tr>
+        <tr>
+          <td>"A very long text that needs to be shortened"</td>
+          <td><code>truncate: 20</code></td>
+          <td>{{ "A very long text that needs to be shortened" |> truncate: 20 }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer-cta">
+  <h3>Ready to build?</h3>
+  <p>Start creating your own islands today.</p>
+</div>

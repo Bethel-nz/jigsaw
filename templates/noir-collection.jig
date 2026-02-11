@@ -1,0 +1,77 @@
+@meta {{
+title: "NØIR — Collection",
+description: "Full collection. Minimal. Raw. Essential."
+}}
+
+<section class="noir-section" style="padding-top: 8rem;">
+  <div>
+    <p class="noir-section-label">001 / COLLECTION</p>
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:2rem;">
+      <h1 class="noir-section-title">COLLECTION</h1>
+      <span class="noir-section-label" style="color:var(--muted-dim);">{{ productCount }} PIECES</span>
+    </div>
+  </div>
+
+  <!-- Filter buttons -->
+  <div class="noir-filters" style="margin-top: 2.5rem;">
+    <a href="/collection?category=ALL" class="noir-filter-btn {% if currentFilter == 'ALL' %}active{% endif %}"
+      data-transition="fade">ALL</a>
+    {% for cat in categories %}
+    <a href="/collection?category={{ cat }}" class="noir-filter-btn {% if currentFilter == cat %}active{% endif %}"
+      data-transition="fade">{{ cat }}</a>
+    {% endfor %}
+  </div>
+
+
+
+  <div class="noir-grid">
+    {% for product in products %}
+    <div class="noir-card" data-category="{{ product.category }}" data-init-observe>
+      <div class="noir-card-rgb"></div>
+      <a href="/product/{{ product.id }}" data-transition="fade">
+        <div class="noir-card-img">
+          <img src="/static/noir/{{ product.id }}.jpg" alt="{{ product.name }}" loading="lazy">
+          <div class="noir-card-scanlines"></div>
+          <span class="noir-card-category">{{ product.category }}</span>
+          <span class="noir-card-size">{{ product.size }}</span>
+        </div>
+      </a>
+      <div class="noir-card-info">
+        <div class="noir-card-header">
+          <div>
+            <div class="noir-card-name">{{ product.name }}</div>
+            <div class="noir-card-price">${{ product.price }}</div>
+          </div>
+          <div class="noir-card-id">{{ product.id | upper }}</div>
+        </div>
+        <button class="noir-add-btn" data-id="{{ product.id }}" data-name="{{ product.name }}"
+          data-cat="{{ product.category }}" data-price="{{ product.price }}" @click="
+          addToCart({ id: $el.dataset.id, name: $el.dataset.name, category: $el.dataset.cat, price: Number($el.dataset.price) });
+          $el.textContent = 'ADDED';
+          $el.classList.add('added');
+          setTimeout(function() { $el.textContent = 'ADD TO BAG'; $el.classList.remove('added'); }, 1200);
+        ">ADD TO BAG</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var items = document.querySelectorAll('[data-init-observe]');
+    if (!items.length) return;
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          setTimeout(function () { e.target.classList.add('visible'); }, 0);
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.05 });
+    items.forEach(function (el, i) {
+      el.style.transitionDelay = (i * 80) + 'ms';
+      obs.observe(el);
+    });
+  });
+</script>

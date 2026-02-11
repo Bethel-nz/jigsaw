@@ -1,0 +1,73 @@
+@meta {{
+title: "NØIR — {{ product.name }}",
+description: "{{ product.name }} — ${{ product.price }}"
+}}
+
+<div class="noir-product-detail">
+  <div class="noir-product-image">
+    <img src="/static/noir/{{ product.id }}.jpg" alt="{{ product.name }}">
+  </div>
+
+  <div class="noir-product-info">
+    <div class="noir-product-cat">{{ product.category }}</div>
+    <h1 class="noir-product-name">{{ product.name }}</h1>
+    <div class="noir-product-price">${{ product.price }}</div>
+
+    <div class="noir-sizes">
+      <span class="noir-size-label">Size — {{ product.size }} fit</span>
+      <button class="noir-size-btn" @click="selectSize('XS', $el)">XS</button>
+      <button class="noir-size-btn" @click="selectSize('S', $el)">S</button>
+      <button class="noir-size-btn active" @click="selectSize('M', $el)">M</button>
+      <button class="noir-size-btn" @click="selectSize('L', $el)">L</button>
+      <button class="noir-size-btn" @click="selectSize('XL', $el)">XL</button>
+    </div>
+
+    @fn selectSize(size, btn) {
+    var buttons = document.querySelectorAll('.noir-size-btn');
+    buttons.forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    $state.selectedSize = size;
+    }
+
+    @fn addToCart(product) {
+    console.log('[NØIR] addToCart @fn called:', product);
+    if (!$state.cart) $state.cart = [];
+    var existing = $state.cart.find(function(i) { return i.id === product.id; });
+    if (existing) {
+    existing.qty++;
+    } else {
+    var item = JSON.parse(JSON.stringify(product));
+    item.qty = 1;
+    if ($state.selectedSize) item.size = $state.selectedSize;
+    $state.cart.push(item);
+    }
+    $state.cart = [].concat($state.cart);
+    console.log('[NØIR] Cart now:', $state.cart);
+    }
+
+    <button class="noir-product-add" id="product-add-btn" @state="product" @init='{{ product | json }}' @click="
+      addToCart($state.product);
+      $el.textContent = 'ADDED ';
+      $el.classList.add('added');
+      setTimeout(function() {
+        var btn = document.getElementById('product-add-btn');
+        if (btn) { btn.textContent = 'ADD TO BAG'; btn.classList.remove('added'); }
+      }, 1500);
+    ">ADD TO BAG</button>
+
+    <p class="noir-product-desc">
+      Minimal construction. Heavyweight cotton. {{ product.size }} fit.
+      Part of the NØIR Drop 001 collection — designed for those who value
+      raw simplicity over excess.
+    </p>
+
+    <a href="/collection" class="noir-view-all" data-transition="fade" style="margin-top:3rem;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12" />
+        <polyline points="12 19 5 12 12 5" />
+      </svg>
+      <span>Back to Collection</span>
+    </a>
+  </div>
+</div>

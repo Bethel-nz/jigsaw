@@ -1,0 +1,40 @@
+@meta {{
+  title: "Batching Test"
+}}
+
+<div id="result">Waiting...</div>
+<div id="count">Effect Runs: <span @text="$state.runCount">0</span></div>
+
+<script>
+  // Expose for debugging
+  window.testBatching = function() {
+    $state.runCount = 0;
+    $state.value = 0;
+    
+    // Register effect
+    $effect(() => {
+      $state.runCount++;
+      console.log('Effect ran, value:', $state.value);
+    }, ['value']);
+    
+    // Reset count after initial run
+    setTimeout(() => {
+      $state.runCount = 0;
+      
+      console.log('Starting loop updates...');
+      // Update 10 times in a loop
+      for(let i=0; i<10; i++) {
+        $state.value = i;
+      }
+      
+      // Check result after next tick
+      setTimeout(() => {
+        const passed = $state.runCount === 1;
+        document.getElementById('result').textContent = passed ? 'PASS: Ran 1 time' : 'FAIL: Ran ' + $state.runCount + ' times';
+        document.body.style.backgroundColor = passed ? '#d1fae5' : '#fee2e2';
+      }, 50);
+    }, 50);
+  };
+</script>
+
+<button onclick="testBatching()" id="start-test">Start Test</button>

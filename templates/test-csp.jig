@@ -1,0 +1,4 @@
+
+<button @click="$state.count++">Increment</button>
+<input @input="console.log($el.value)" />
+@fn test() { console.log('test') }
