@@ -6,7 +6,7 @@
     "dev": "bun run --hot ./index.ts",
     "node-dev": "tsx watch ./index.ts",
     "build": "tsx ./build.ts",
-    "start": "./dist/jigsaw-engine",
+    "start": "NODE_ENV=production node ./dist/server.js",
     "server:build": "bun run ./server-build.ts"
   },
   "devDependencies": {
