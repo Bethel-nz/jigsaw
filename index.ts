@@ -1,5 +1,30 @@
+import { decode } from './src/codec';
+import * as path from 'path';
 import { fetchUserData, fetchProfiles } from './data';
 import JigSaw from './src/jigsaw';
+import * as fs from 'fs';
+// Load pre-bundled templates if in production
+if (process.env.NODE_ENV === 'production') {
+  
+  let bundlePath = './dist/templates.jigsaw';
+  if (!fs.existsSync(bundlePath)) bundlePath = './templates.jigsaw';
+  if (!fs.existsSync(bundlePath)) bundlePath = path.join(path.dirname(process.execPath), 'templates.jigsaw');
+
+  if (fs.existsSync(bundlePath)) {
+    console.log('[Jigsaw] Loading bundled templates...');
+    const encoded = fs.readFileSync(bundlePath);
+    const bundle = JSON.parse(decode(encoded));
+    jigsaw.usePreloadedTemplates(bundle);
+    
+  const shellPath = './dist/index.html';
+  if (fs.existsSync(shellPath)) {
+    console.log('[Jigsaw] Loading app shell...');
+    jigsaw.useAppShell(fs.readFileSync(shellPath, 'utf8'));
+  }
+
+  }
+}
+
 
 process.on('unhandledRejection', (error) => {
   console.error('Unhandled promise rejection:', error);
@@ -238,7 +263,8 @@ jigsaw.route('/product/:id', (params) => {
 // Start Server only if run directly
 import { fileURLToPath } from 'url';
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.env.NODE_ENV === "production" || process.argv[1]?.endsWith("index.ts")) {
   const port = parseInt(process.env.PORT || '3090');
-  jigsaw.serve({ port });
+  console.log("[Jigsaw] Calling serve on port", port);
+try { jigsaw.serve({ port }); } catch(e) { console.error("[Jigsaw] Server error:", e); process.exit(1); }
 }

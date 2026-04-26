@@ -1,4 +1,4 @@
-import { jigsaw, posts, noirProducts } from './index';
+import { jigsaw } from './index';
 
 // Parse Arguments for Build
 console.log('Starting build from build.ts...');
@@ -13,10 +13,6 @@ const ignoreList =
 jigsaw
   .build('dist', {
     ignore: ignoreList,
-    staticPaths: {
-      '/blog/:id': posts.map((p) => ({ id: p.id.toString() })),
-      '/profile/:id': [{ id: '1' }, { id: '2' }],
-      '/product/:id': noirProducts.map((p) => ({ id: p.id })),
-    },
+    staticPaths: {},
   })
   .catch((e) => console.error('Build failed:', e));

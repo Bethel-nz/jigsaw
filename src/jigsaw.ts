@@ -25,12 +25,14 @@ class JigSaw {
   > = new Map();
   private static routeCache: Map<string, CachedRoute> = new Map();
   private static parentRoutes: Set<string> = new Set();
+  private static preloadedTemplates: Record<string, string> | null = null;
+  private static appShell: string | null = null;
 
   private static watcher: chokidar.FSWatcher | null = null;
   private static wss: WebSocketServer | null = null;
 
   private static templatesDir: string = path.join(process.cwd(), 'templates');
-  private static componentsDir: string = path.join(process.cwd(), 'components');
+  private static componentsDir: string = path.join(process.cwd(), 'templates', 'components');
   private static publicDir: string = path.join(process.cwd(), 'public');
 
   private static config: JigSawConfig = {
@@ -49,6 +51,24 @@ class JigSaw {
     return Object.fromEntries(this.pipes);
   }
 
+  
+  
+  static useAppShell(html: string): void {
+    this.appShell = html;
+  }
+
+  static usePreloadedTemplates(templates: Record<string, string>): void {
+    this.preloadedTemplates = templates;
+    // Hydrate the template map immediately
+    for (const [name, content] of Object.entries(templates)) {
+      if (name.startsWith("comp:")) {
+         this.components.set(name.slice(5), content);
+      } else {
+         this.templates.set(name, new Knob(content, name));
+      }
+    }
+  }
+
   static template(nameOrNames: string | string[]): void {
     if (Array.isArray(nameOrNames)) {
       nameOrNames.forEach((name) => this.loadSingleTemplate(name));
@@ -58,6 +78,7 @@ class JigSaw {
   }
 
   private static loadSingleTemplate(name: string): void {
+    if (this.preloadedTemplates && this.templates.has(name)) return;
     const templatePath = path.join(this.templatesDir, `${name}.jig`);
     if (!fs.existsSync(templatePath)) {
       console.warn(
@@ -207,7 +228,13 @@ class JigSaw {
           finalContent = this.injectScript(finalContent, handlerScriptContent);
         }
 
+        if (this.appShell) {
+          return this.appShell
+            .replace(/<div id="jigsaw-root">[\s\S]*?<\/div>/, '<div id="jigsaw-root">' + finalContent + '</div>')
+            .replace(/<title>[\s\S]*?<\/title>/, '<title>' + (meta.title || 'Jigsaw') + '</title>');
+        }
         return finalContent;
+
       } catch (error) {
         console.error(`Error handling route ${path}:`, error);
 
@@ -351,6 +378,29 @@ class JigSaw {
     this.apiRoutes.set(routePath, handler);
   }
 
+  
+  static generateAppShell(initialHtml: string = '', meta: any = {}, scripts: any[] = []): string {
+    const context = { meta, scripts };
+    // We use layout.jig as the base shell if it exists
+    try {
+      const shell = this.render('layout', { content: initialHtml }, meta);
+      return shell.html;
+    } catch (e) {
+      // Fallback basic shell if layout fails
+      return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${meta.title || 'Jigsaw App'}</title>
+</head>
+<body>
+  <div id="jigsaw-root">${initialHtml}</div>
+  <script src="/static/jigsaw-router.js"></script>
+</body>
+</html>`;
+    }
+  }
+
   static serve({ port }: JigSawConfig): void {
     this.config.port = port;
     this.loadTemplates();
@@ -455,6 +505,7 @@ class JigSaw {
 
     // 3. Render Routes
     console.log('Rendering routes...');
+    let hasErrors = false;
     for (const [routePath, handler] of this.routes) {
       // Check Ignore List
       if (options.ignore && options.ignore.includes(routePath)) {
@@ -474,13 +525,7 @@ class JigSaw {
             for (const [key, value] of Object.entries(params)) {
               actualPath = actualPath.replace(`:${key}`, value);
             }
-            await this.renderAndSaveRoute(
-              routePath,
-              handler,
-              distPath,
-              actualPath,
-              params,
-            );
+            if (!await this.renderAndSaveRoute(routePath, handler, distPath, actualPath, params)) hasErrors = true;
           }
         } else {
           console.warn(
@@ -491,8 +536,9 @@ class JigSaw {
       }
 
       // Handle Static Routes
-      await this.renderAndSaveRoute(routePath, handler, distPath, routePath);
+      if (!await this.renderAndSaveRoute(routePath, handler, distPath, routePath)) hasErrors = true;
     }
+    if (hasErrors) throw new Error("Build failed: One or more routes failed to render.");
     console.log('Build complete!');
   }
 
@@ -502,9 +548,9 @@ class JigSaw {
     distPath: string,
     savePath: string,
     params: Record<string, string> = {},
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
-      console.log(`Rendering ${savePath}...`);
+      console.log('Rendering ' + savePath + '...');
       let content = await handler(params);
       let meta = {};
       let scripts: { content: string }[] = [];
@@ -533,7 +579,7 @@ class JigSaw {
       const fileName =
         savePath === '/'
           ? 'index.html'
-          : `${savePath.replace(/^\//, '')}/index.html`;
+          : savePath.replace(/^\//, '') + '/index.html';
       const filePath = path.join(distPath, fileName);
       const fileDir = path.dirname(filePath);
 
@@ -542,8 +588,10 @@ class JigSaw {
       }
 
       fs.writeFileSync(filePath, finalContent);
+      return true;
     } catch (e) {
-      console.error(`Error rendering route ${savePath}:`, e);
+      console.error('Error rendering route ' + savePath + ':', e);
+      return false;
     }
   }
 
@@ -611,12 +659,12 @@ class JigSaw {
     return contentTypes[ext.toLowerCase()] || 'application/octet-stream';
   }
 
-  static loadComponents(): void {
+    static loadComponents(): void {
     if (!fs.existsSync(this.componentsDir)) return;
     const files = fs.readdirSync(this.componentsDir);
     files.forEach((file) => {
-      if (file.startsWith('_') && file.endsWith('.jig')) {
-        const componentName = file.slice(1, -4);
+      if (file.endsWith('.jig')) {
+        const componentName = file.startsWith('_') ? file.slice(1, -4) : file.slice(0, -4);
         const content = fs.readFileSync(
           path.join(this.componentsDir, file),
           'utf-8',

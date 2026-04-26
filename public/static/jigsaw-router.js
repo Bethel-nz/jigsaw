@@ -238,9 +238,7 @@
 					}
 				}
 
-				if (appState[key] === undefined) {
-					appState[key] = val;
-				}
+				if (appState[key] === undefined) { appState[key] = val; } else { updateStateBindings(key, appState[key]); }
 			}
 		});
 	}
@@ -327,88 +325,64 @@
 	}
 
 	// Navigate to a new page
-	async function navigate(url, transitionType) {
-		try {
-			// Signal that we are leaving the current page
-			window.dispatchEvent(new CustomEvent('jigsaw:unload'));
+	                async function navigate(url, transitionType) {
+                try {
+                        window.dispatchEvent(new CustomEvent('jigsaw:unload'));
+                        const response = await fetch(url);
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        const html = await response.text();
+                        const parser = new DOMParser();
+                        const newDoc = parser.parseFromString(html, 'text/html');
 
-			// Fetch the new page
-			const response = await fetch(url);
-			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        const updateDOM = () => {
+                                document.title = newDoc.title;
+                                syncIslands(newDoc);
+                                saveIslandStates();
+                                const currentRoot = document.getElementById('jigsaw-root');
+                                const newRoot = newDoc.getElementById('jigsaw-root');
+                                if (currentRoot && newRoot) {
+                                        currentRoot.innerHTML = newRoot.innerHTML;
+                                        restoreIslandStates(newDoc);
+                                } else {
+                                        document.body.innerHTML = newDoc.body.innerHTML;
+                                        restoreIslandStates(newDoc);
+                                }
+                        };
 
-			const html = await response.text();
-			const parser = new DOMParser();
-			const newDoc = parser.parseFromString(html, 'text/html');
+                        const postUpdate = () => {
+                                const currentRoot = document.getElementById('jigsaw-root') || document.body;
+                                const allScripts = newDoc.querySelectorAll('script');
+                                allScripts.forEach(script => {
+                                        if (script.textContent && script.textContent.includes('__JIGSAW_HANDLERS')) {
+                                                const newScript = document.createElement('script');
+                                                newScript.textContent = script.textContent;
+                                                document.body.appendChild(newScript);
+                                        }
+                                });
+                                executeScripts(currentRoot);
+                                scanFunctions(currentRoot);
+                                initState();
+                                runInitHandlers();
+                        };
 
-			// Function to update the DOM
-			const updateDOM = () => {
-				// Update title
-				document.title = newDoc.title;
+                        if (supportsViewTransitions && transitionType !== 'none') {
+                                document.documentElement.dataset.transition = transitionType || 'default';
+                                const transition = document.startViewTransition(updateDOM);
+                                try { await transition.finished; } catch(e) {}
+                                delete document.documentElement.dataset.transition;
+                                postUpdate();
+                        } else {
+                                updateDOM();
+                                postUpdate();
+                        }
+                        window.history.pushState({}, '', url);
+                } catch (error) {
+                        console.error('Navigation failed:', error);
+                        window.location.href = url;
+                }
+        }
 
-				// Sync reactive data in islands BEFORE swapping
-				syncIslands(newDoc);
-
-				// Save current island states (detach them)
-				saveIslandStates();
-
-				// Update App Shell Content (target #jigsaw-root)
-				const currentRoot = document.getElementById('jigsaw-root');
-				const newRoot = newDoc.getElementById('jigsaw-root');
-
-				if (currentRoot && newRoot) {
-					currentRoot.innerHTML = newRoot.innerHTML;
-
-					// Restore preserved islands into the new structure
-					restoreIslandStates(newDoc);
-
-					// Execute handler scripts from the FULL response (they live outside #jigsaw-root)
-					const allScripts = newDoc.querySelectorAll('script');
-					let handlerScriptsFound = 0;
-					allScripts.forEach(script => {
-						if (script.textContent && script.textContent.includes('__JIGSAW_HANDLERS')) {
-							handlerScriptsFound++;
-							const newScript = document.createElement('script');
-							newScript.textContent = script.textContent;
-							document.body.appendChild(newScript);
-						}
-					});
-
-
-					// Execute any scripts in the new content
-					executeScripts(currentRoot);
-					scanFunctions(currentRoot);
-				} else {
-					// Fallback if root not found (e.g. error page)
-					document.body.innerHTML = newDoc.body.innerHTML;
-					restoreIslandStates(newDoc);
-				}
-
-				// Re-initialize state for new elements
-				initState();
-			};
-
-			// Use View Transitions API if supported
-			if (supportsViewTransitions && transitionType !== 'none') {
-				document.documentElement.dataset.transition = transitionType || 'default';
-				const transition = document.startViewTransition(updateDOM);
-				transition.finished.finally(() => {
-					delete document.documentElement.dataset.transition;
-				});
-			} else {
-				updateDOM();
-			}
-
-			// Update browser history
-			window.history.pushState({}, '', url);
-
-		} catch (error) {
-			console.error('Navigation failed:', error);
-			window.location.href = url;
-		}
-	}
-
-	// Attach link listeners and comprehensive event delegation
-	function attachLinkListeners() {
+        function attachLinkListeners() {
 
 		function initEventDelegation() {
 			// 1. Map "Jigsaw Events" to "Native Events"
