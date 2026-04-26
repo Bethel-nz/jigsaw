@@ -8,7 +8,7 @@
     "build": "tsx ./build.ts",
     "start": "tsx ./index.ts",
     "server:build": "bun run ./server-build.ts",
-    "prod:start": "NODE_ENV=production node ./dist/server.js"
+    "prod:start": "NODE_ENV=production ./dist/jigsaw-engine"
   },
   "devDependencies": {
     "@types/bun": "latest",
