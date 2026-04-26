@@ -11,6 +11,40 @@
 	// Store functions mapped by DOM element
 	const functionRegistry = new WeakMap();
 
+	// Reveal-on-scroll observer.
+	// Any element with `@observe` (compiled to `data-observe`) gets the class
+	// named in its value (default "visible") added when it intersects the
+	// viewport. The CSS owns the transition; the engine just flips the class.
+	// Optional `data-stagger` (in ms) sets transition-delay so siblings reveal
+	// sequentially.
+	function setupRevealObserver() {
+		const items = document.querySelectorAll('[data-observe]:not([data-observed])');
+		if (!items.length) return;
+		if (typeof IntersectionObserver === 'undefined') {
+			items.forEach(el => {
+				el.setAttribute('data-observed', '');
+				const cls = el.getAttribute('data-observe') || 'visible';
+				el.classList.add(cls);
+			});
+			return;
+		}
+		const obs = new IntersectionObserver((entries) => {
+			entries.forEach(e => {
+				if (e.isIntersecting) {
+					const cls = e.target.getAttribute('data-observe') || 'visible';
+					e.target.classList.add(cls);
+					obs.unobserve(e.target);
+				}
+			});
+		}, { threshold: 0.05 });
+		items.forEach((el, i) => {
+			el.setAttribute('data-observed', '');
+			const stagger = parseInt(el.getAttribute('data-stagger') || '0', 10);
+			if (stagger > 0) el.style.transitionDelay = (i * stagger) + 'ms';
+			obs.observe(el);
+		});
+	}
+
 	function scanFunctions(rootElement = document) {
 		const scripts = rootElement.querySelectorAll('script[type="jigsaw/fn"]');
 
@@ -311,6 +345,17 @@
 				currentIsland.parentNode.replaceChild(savedIsland, currentIsland);
 			}
 		});
+
+		// 4. Re-apply preserved state to all data-state bindings.
+		// Fresh DOM (from innerHTML reset) shows server placeholders even though
+		// appState still holds live values. The proxy's `set` trap only fires
+		// bindings on actual change, so push current values manually.
+		Object.keys(stateData).forEach(key => {
+			const value = stateData[key];
+			if (value !== undefined && (typeof value !== 'object' || value === null)) {
+				updateStateBindings(key, value);
+			}
+		});
 	}
 
 	// Execute scripts in the new content
@@ -361,8 +406,15 @@
                                 });
                                 executeScripts(currentRoot);
                                 scanFunctions(currentRoot);
+                                // Drop effects registered by the previous page's @init runs;
+                                // runInitHandlers() below will re-register them fresh.
+                                globalEffects.length = 0;
+                                pendingKeys.clear();
+                                isFlushPending = false;
                                 initState();
                                 runInitHandlers();
+                                setupRevealObserver();
+                                window.dispatchEvent(new CustomEvent('jigsaw:loaded'));
                         };
 
                         if (supportsViewTransitions && transitionType !== 'none') {
@@ -737,19 +789,8 @@
 			if (!handler || el.hasAttribute('data-state')) return;
 
 			try {
-				// Find the closest scope with registered functions
-				let scope = null;
-				let current = el;
-				while (current) {
-					scope = functionRegistry.get(current);
-					if (scope && scope[handler]) break;
-					current = current.parentElement;
-				}
-
-				// Create context for the function
 				const $el = wrapEl(el);
 				const $state = appState;
-				// Create $ref proxy inline
 				const $ref = new Proxy({}, {
 					get(_, name) {
 						const refEl = document.querySelector(`[data-ref="${name}"]`);
@@ -757,29 +798,72 @@
 					}
 				});
 
-				if (scope && scope[handler]) {
-					// Build full shared context with $el, $state, $ref AND sibling functions
-					const context = { $el, $state, $ref, $effect, $http };
+				// Walk up to find the nearest functionRegistry scope (for sibling fns)
+				let scope = null;
+				let scopeNode = el;
+				while (scopeNode) {
+					const found = functionRegistry.get(scopeNode);
+					if (found) { scope = found; break; }
+					scopeNode = scopeNode.parentElement;
+				}
 
-					// Add sibling functions that use the shared context
+				// Branch A: handler ID (compiled from `@init="$effect(...)"` etc.)
+				if (handler.startsWith('jg_')) {
+					executeInitHandler(handler, el, $el, $state, $ref, scope);
+					return;
+				}
+
+				// Branch B: bare function name in scope
+				if (scope && scope[handler]) {
+					const context = { $el, $state, $ref, $effect, $http };
 					for (const fnName in scope) {
 						context[fnName] = (...args) => {
 							const sibFn = scope[fnName]();
 							return sibFn.apply(context, args);
 						};
 					}
-
 					const fn = scope[handler]();
 					fn.call(context);
-				} else if (typeof window[handler] === 'function') {
-					window[handler]();
-				} else {
-					console.warn(`[Jigsaw] Init handler '${handler}' not found`);
+					return;
 				}
+
+				// Branch C: window-global function
+				if (typeof window[handler] === 'function') {
+					window[handler]();
+					return;
+				}
+
+				console.warn(`[Jigsaw] Init handler '${handler}' not found`);
 			} catch (err) {
 				console.error('[Jigsaw] Error in init handler:', err);
 			}
 		});
+	}
+
+	// Execute a precompiled @init handler (jg_xxx) with full scoped-function context.
+	// Mirrors the @click dispatch path in initEventDelegation.
+	function executeInitHandler(handlerId, el, $el, $state, $ref, scope) {
+		const compiled = window.__JIGSAW_HANDLERS && window.__JIGSAW_HANDLERS[handlerId];
+		if (!compiled) {
+			console.warn('[Jigsaw] @init handler ' + handlerId + ' not found in registry');
+			return;
+		}
+		const fnNames = scope ? Object.keys(scope) : [];
+		if (fnNames.length > 0 && compiled.__code) {
+			const context = { $el, $state, $ref, $effect, $http };
+			fnNames.forEach(name => {
+				context[name] = function () {
+					const sibFn = scope[name]();
+					return sibFn.apply(context, arguments);
+				};
+			});
+			const fnValues = fnNames.map(n => context[n]);
+			const F = Function;
+			const dyn = new F('$el', '$ref', '$state', '$effect', '$http', ...fnNames, compiled.__code);
+			dyn($el, $ref, $state, $effect, $http, ...fnValues);
+		} else {
+			compiled.call({ $el: $el, $state: $state, $ref: $ref, $effect: $effect, $http: $http }, null, $el, $state, $ref, null, $http, $effect);
+		}
 	}
 
 	// Initialize
@@ -789,5 +873,6 @@
 		initState();
 		scanFunctions();
 		runInitHandlers();
+		setupRevealObserver();
 	});
 })();

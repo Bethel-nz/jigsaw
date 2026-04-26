@@ -80,14 +80,34 @@ export class Compiler {
         let transformed = node.value;
 
         // Common events to support
-        // 1. Transform specific directives (simple key replacement to support interpolations)
+        // 1a. @init expressions (containing a `(`) compile to handler IDs so the
+        // runtime can execute them with full scoped-function context, not just
+        // resolve a function name. Bare names and values fall through to (1b).
+        transformed = transformed.replace(
+          /@init="([^"]*\([^"]*)"/g,
+          (_match, code) => {
+            const handlerId = this.registerHandler(code);
+            return `data-init="${handlerId}"`;
+          },
+        );
+        transformed = transformed.replace(
+          /@init='([^']*\([^']*)'/g,
+          (_match, code) => {
+            const handlerId = this.registerHandler(code);
+            return `data-init='${handlerId}'`;
+          },
+        );
+
+        // 1b. Transform specific directives (simple key replacement to support interpolations)
         // We look for @directive= followed by a quote
         transformed = transformed
           .replace(/@sync=(?=["'])/g, 'data-sync=')
           .replace(/@state=(?=["'])/g, 'data-state=')
           .replace(/@init=(?=["'])/g, 'data-init=')
           .replace(/@ref=(?=["'])/g, 'data-ref=')
-          .replace(/@bind=(?=["'])/g, 'data-bind=');
+          .replace(/@bind=(?=["'])/g, 'data-bind=')
+          .replace(/@observe=(?=["'])/g, 'data-observe=')
+          .replace(/(\s)@observe(?=[\s>])/g, '$1data-observe=""');
 
         // 2. Generic Event Transformation: @event="..." -> data-on-event="handler_id"
 

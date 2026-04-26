@@ -26,7 +26,7 @@ description: "Full collection. Minimal. Raw. Essential."
 
   <div class="noir-grid">
     {% for product in products %}
-    <div class="noir-card" data-category="{{ product.category }}" data-init-observe>
+    <div class="noir-card" data-category="{{ product.category }}" @observe data-stagger="80">
       <div class="noir-card-rgb"></div>
       <a href="/product/{{ product.id }}" data-transition="fade">
         <div class="noir-card-img">
@@ -56,22 +56,3 @@ description: "Full collection. Minimal. Raw. Essential."
     {% endfor %}
   </div>
 </section>
-
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
-    var items = document.querySelectorAll('[data-init-observe]');
-    if (!items.length) return;
-    var obs = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) {
-          setTimeout(function () { e.target.classList.add('visible'); }, 0);
-          obs.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.05 });
-    items.forEach(function (el, i) {
-      el.style.transitionDelay = (i * 80) + 'ms';
-      obs.observe(el);
-    });
-  });
-</script>

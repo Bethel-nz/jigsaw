@@ -51,7 +51,7 @@ link: (rel: "stylesheet", href: "/static/noir.css")
 							<line x1="3" y1="6" x2="21" y2="6" />
 							<path d="M16 10a4 4 0 01-8 0" />
 						</svg>
-						<span class="noir-cart-badge" @ref="cartBadge" @state="cartCount" @sync="cartCount"
+						<span class="noir-cart-badge" @ref="cartBadge" @state="cartCount"
 							style="display:none;">0</span>
 					</button>
 				</div>
@@ -100,7 +100,8 @@ link: (rel: "stylesheet", href: "/static/noir.css")
 		}
 
 
-		<!-- Reactive Cart Listener: Ensures renderCart runs when cart changes -->
+		<!-- Reactive Cart Listener: renderCart auto-runs when $state.cart changes,
+		     regardless of which page (layout, product, collection) mutated it. -->
 		<div style="display:none" @init="$effect(renderCart, ['cart'])"></div>
 
 		@fn renderCart() {
@@ -175,10 +176,12 @@ link: (rel: "stylesheet", href: "/static/noir.css")
 			// Trigger reactivity (reassign array)
 			$state.cart = [].concat($state.cart);
 
-			// Update total count
+			// Update total count. The $effect on `cart` will re-render the badge
+			// and drawer; we just need to mutate state here.
 			var total = 0;
-			for (var i = 0; i < $state.cart.length; i++) { total +=$state.cart[i].qty; } $state.cartCount=total; /*
-				Optional: Animation or auto-open */ var badge=document.querySelector('.noir-cart-btn svg'); if (badge) {
+			for (var i = 0; i < $state.cart.length; i++) { total +=$state.cart[i].qty; } $state.cartCount=total;
+
+			/* Optional: Animation or auto-open */ var badge=document.querySelector('.noir-cart-btn svg'); if (badge) {
 				badge.classList.remove('bump'); void badge.offsetWidth; badge.classList.add('bump'); } } {%
 				transition "fade" %} <div class="noir-content">
 				{{ content | safe }}
@@ -193,7 +196,7 @@ link: (rel: "stylesheet", href: "/static/noir.css")
 	</footer>
 	</div>
 
-	<script src="/static/jigsaw-router.js?v=6" defer></script>
+	<script src="/static/jigsaw-router.js?v=8" defer></script>
 
 	<script>
 		setInterval(function () {

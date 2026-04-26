@@ -40,7 +40,7 @@ description: "Minimal. Raw. Essential."
 
   <div class="noir-grid">
     {% for product in featured %}
-    <div class="noir-card" data-init-observe>
+    <div class="noir-card" @observe>
       <div class="noir-card-rgb"></div>
       <a href="/product/{{ product.id }}" data-transition="fade">
         <div class="noir-card-img">
@@ -100,7 +100,7 @@ description: "Minimal. Raw. Essential."
   <div class="noir-lookbook-grid" style="margin-top:4rem;">
     <!-- Full width -->
     <div class="noir-lookbook-row full">
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-16-9">
           <img src="/static/noir/lookbook-1.jpg" alt="Drop 001 Spring">
           <div class="noir-lookbook-grain"></div>
@@ -115,7 +115,7 @@ description: "Minimal. Raw. Essential."
 
     <!-- Split -->
     <div class="noir-lookbook-row split">
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-2-3">
           <img src="/static/noir/lookbook-2.jpg" alt="Signal Tee">
           <div class="noir-lookbook-grain"></div>
@@ -126,7 +126,7 @@ description: "Minimal. Raw. Essential."
           <span class="noir-lookbook-tag">CORE</span>
         </div>
       </div>
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-2-3">
           <img src="/static/noir/lookbook-3.jpg" alt="Static Hoodie">
           <div class="noir-lookbook-grain"></div>
@@ -141,7 +141,7 @@ description: "Minimal. Raw. Essential."
 
     <!-- Full width cinematic -->
     <div class="noir-lookbook-row full">
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-21-9">
           <img src="/static/noir/lookbook-4.jpg" alt="Collection SS26">
           <div class="noir-lookbook-grain"></div>
@@ -156,7 +156,7 @@ description: "Minimal. Raw. Essential."
 
     <!-- Trio -->
     <div class="noir-lookbook-row trio">
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-3-4">
           <img src="/static/noir/lookbook-5.jpg" alt="Noise Pant">
           <div class="noir-lookbook-grain"></div>
@@ -167,7 +167,7 @@ description: "Minimal. Raw. Essential."
           <span class="noir-lookbook-tag">BOTTOM</span>
         </div>
       </div>
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-3-4">
           <img src="/static/noir/lookbook-6.jpg" alt="Corrupt Jacket">
           <div class="noir-lookbook-grain"></div>
@@ -178,7 +178,7 @@ description: "Minimal. Raw. Essential."
           <span class="noir-lookbook-tag">OUTER</span>
         </div>
       </div>
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-3-4">
           <img src="/static/noir/lookbook-7.jpg" alt="Decay Vest">
           <div class="noir-lookbook-grain"></div>
@@ -193,7 +193,7 @@ description: "Minimal. Raw. Essential."
 
     <!-- Final full -->
     <div class="noir-lookbook-row full">
-      <div class="noir-lookbook-item" data-init-observe>
+      <div class="noir-lookbook-item" @observe>
         <div class="noir-lookbook-img ratio-2-1">
           <img src="/static/noir/lookbook-8.jpg" alt="Editorial">
           <div class="noir-lookbook-grain"></div>
@@ -210,19 +210,3 @@ description: "Minimal. Raw. Essential."
   <div class="noir-rule"></div>
 </section>
 
-<script>
-  // IntersectionObserver for scroll-reveal
-  document.addEventListener('DOMContentLoaded', function () {
-    var items = document.querySelectorAll('[data-init-observe]');
-    if (!items.length) return;
-    var obs = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) {
-          e.target.classList.add('visible');
-          obs.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.05 });
-    items.forEach(function (el) { obs.observe(el); });
-  });
-</script>
