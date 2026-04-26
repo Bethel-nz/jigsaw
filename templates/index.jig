@@ -14,7 +14,7 @@
 
 
 <body>
-	{{{ 'navigation' }}}
+	<nav>Navigation</nav>
 	<div class="profile">
 		<h1>{{ title |> upper }}</h1>
         

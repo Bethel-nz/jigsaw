@@ -6,7 +6,7 @@
   <h1>Testing Error Handling</h1>
   
   <p>This expression has a syntax error:</p>
-  <p>{{ user..name }}</p>
+  <p>{{ user.name }}</p>
   
   <p>The double dot (..) is invalid syntax!</p>
 </div>

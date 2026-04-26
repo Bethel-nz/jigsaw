@@ -23,10 +23,10 @@ description: "{{ product.name }} — ${{ product.price }}"
     </div>
 
     @fn selectSize(size, btn) {
-    var buttons = document.querySelectorAll('.noir-size-btn');
-    buttons.forEach(function(b) { b.classList.remove('active'); });
-    btn.classList.add('active');
-    $state.selectedSize = size;
+	    var buttons = document.querySelectorAll('.noir-size-btn');
+	    buttons.forEach(function(b) { b.classList.remove('active'); });
+	    btn.classList.add('active');
+	    $state.selectedSize = size;
     }
 
     @fn addToCart(product) {

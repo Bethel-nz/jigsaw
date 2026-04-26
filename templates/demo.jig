@@ -20,9 +20,9 @@
 </div>
 
 <div class="grid feature-grid">
-  {{{ card(:title="Islands Architecture", :description="Persistent components that stay alive across navigation. Interactive islands are hydrated automatically.") / }}}
-  {{{ card(:title="View Transitions", :description="Native browser animations for smooth page loads. Navigate between pages to see it in action.") / }}}
-  {{{ card(:title="Smart Piping", :description="Transform data easily with built-in and custom pipes like upper, lower, and currency.") / }}}
+  <div class="card-placeholder">Card</div>
+  <div class="card-placeholder">Card</div>
+  <div class="card-placeholder">Card</div>
 </div>
 
 <!-- Interactive Demo Section -->
