@@ -48,13 +48,15 @@ async function build() {
   console.log('--- 4. Compiling Standalone Binary ---');
   try {
     execSync('bun build ./index.ts --compile --bytecode --outfile ./dist/jigsaw-engine');
-    console.log('--- 4.1 Signing Binary ---');
-    try {
-      execSync('codesign --deep --force --sign - --entitlements entitlements.plist ./dist/jigsaw-engine');
-      execSync('xattr -d com.apple.quarantine ./dist/jigsaw-engine 2>/dev/null || true');
-      console.log('✅ Standalone binary signed');
-    } catch (se) {
-      console.warn('⚠️ Codesign failed, but build continued:', se.message);
+    if (process.platform === 'darwin') {
+      console.log('--- 4.1 Signing Binary ---');
+      try {
+        execSync('codesign --deep --force --sign - --entitlements entitlements.plist ./dist/jigsaw-engine');
+        execSync('xattr -d com.apple.quarantine ./dist/jigsaw-engine 2>/dev/null || true');
+        console.log('✅ Standalone binary signed');
+      } catch (se) {
+        console.warn('⚠️ Codesign failed, but build continued:', se.message);
+      }
     }
     console.log('✅ Standalone binary compiled to dist/jigsaw-engine');
   } catch (e) {
